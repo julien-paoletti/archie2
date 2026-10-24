@@ -1,0 +1,14 @@
+{
+  "name": "archie",
+  "version": "0.1.0",
+  "description": "Architecture diagram editor — fast, agnostic editor engine with a canvas renderer.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node serve.mjs",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}
