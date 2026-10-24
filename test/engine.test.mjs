@@ -189,6 +189,19 @@ test('port spreading fans out ends sharing a side and keeps routes orthogonal', 
   }
 });
 
+test('port spreading leaves straight links alone', async () => {
+  const { spreadPorts, routeStraight, sideOf } = await import('../src/engine/routing.js');
+  const a = { x: 0, y: 0, w: 100, h: 60 };
+  const b = { x: 0, y: 200, w: 100, h: 60 };
+  const t = { x: 300, y: 100, w: 100, h: 60 };
+  const items = [
+    { id: 'at', sourceId: 'a', targetId: 't', source: a, target: t, route: routeStraight(a, t) },
+    { id: 'bt', sourceId: 'b', targetId: 't', source: b, target: t, route: routeStraight(b, t) },
+  ];
+  for (const it of items) assert.equal(sideOf(t, it.route.points[1]), 'left', 'both end on the same side');
+  assert.equal(spreadPorts(items).size, 0);
+});
+
 test('manual orthogonal routes pass through bends and re-attach when nodes move', async () => {
   const { routeManual } = await import('../src/engine/routing.js');
   const a = { x: 0, y: 0, w: 100, h: 60 };

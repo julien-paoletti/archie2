@@ -2,8 +2,9 @@ import { boundaryPoint, boundsOf, center, clamp, cubicPoint, dist, pointAlong, p
 
 /**
  * Edge routing. All routers return the same shape:
- *   { kind: 'poly' | 'bezier', points, poly, bbox, mid: {x,y}, end: {x,y}, manual?, smooth?, legs? }
+ *   { kind: 'poly' | 'bezier', points, poly, bbox, mid: {x,y}, end: {x,y}, manual?, smooth?, legs?, straight? }
  * `poly` is a polyline usable for hit testing, `end` the unit direction at the target.
+ * `straight` marks a centre-to-centre line (straight routing), which port spreading leaves alone.
  *
  * The orthogonal router runs A* over a sparse "orthogonal visibility" grid built from
  * obstacle boundaries (plus a clearance margin). State = (grid point, heading), with a
@@ -51,7 +52,7 @@ export function routeEdge(mode, src, tgt, { obstacles = [], fast = false, self =
 
 export function routeStraight(src, tgt) {
   const a = center(src), b = center(tgt);
-  return finish('poly', [boundaryPoint(src, b), boundaryPoint(tgt, a)]);
+  return finish('poly', [boundaryPoint(src, b), boundaryPoint(tgt, a)], { straight: true });
 }
 
 export function routeCurved(src, tgt) {
@@ -440,7 +441,7 @@ export function spreadPorts(items, { maxGap = 18 } = {}) {
   };
   for (const it of items) {
     const pts = it.route.points;
-    if (it.route.kind !== 'poly' || it.route.manual || pts.length < 2 || it.source === it.target) continue;
+    if (it.route.kind !== 'poly' || it.route.manual || it.route.straight || pts.length < 2 || it.source === it.target) continue;
     const s = sideOf(it.source, pts[0]);
     const t = sideOf(it.target, pts[pts.length - 1]);
     if (s) add(it.sourceId + '|' + s, { it, end: 0, side: s, rect: it.source, far: pts[Math.min(2, pts.length - 1)] });
