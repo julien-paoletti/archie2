@@ -17,6 +17,9 @@ import { comboOf, createCommands } from './commands.js';
 import { busMembers, isOverlay, resolveType, showsAsCard } from '../engine/schema.js';
 
 const DRAG_THRESHOLD = 4;
+// Pressing a link's body and dragging reshapes it, so a click that wobbles a few pixels
+// must not: it would add a waypoint (curved/straight) or shift a segment (orthogonal).
+const EDGE_DRAG_THRESHOLD = 10;
 export const PORT_OFFSET = 18;
 const PORT_HIT = 11;
 const HANDLE_HIT = 8;
@@ -443,7 +446,7 @@ export class Editor extends Emitter {
     }
     const pr = this.press;
     if (pr) {
-      const threshold = e.pointerType === 'touch' ? 8 : DRAG_THRESHOLD;
+      const threshold = (pr.hit?.kind === 'edge' ? EDGE_DRAG_THRESHOLD : DRAG_THRESHOLD) + (e.pointerType === 'touch' ? 4 : 0);
       if (Math.hypot(e.x - pr.e.x, e.y - pr.e.y) < threshold) return;
       const g = this.#gestureFor(pr);
       if (g) {

@@ -1,4 +1,4 @@
-import { overlaps } from '../engine/geometry.js';
+import { overlaps, polylineCrossesRect } from '../engine/geometry.js';
 import { boundariesCrossed, busMembers, isOverlay, resolveType } from '../engine/schema.js';
 import { h, kbd, svg, ui } from './dom.js';
 import { popover } from './chrome.js';
@@ -434,13 +434,16 @@ export function createSelectionBar(editor, app, root, { palette }) {
   };
 
   let visible = false;
+  const worldRect = (x, y, w, hh) => {
+    const a = editor.toWorld({ x, y }), b = editor.toWorld({ x: x + w, y: y + hh });
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+  };
   /**
    * Would the bar at (x, y) hide something you may want to grab: the header of an enclosing
    * container, or another element (e.g. the element a selected link points at)?
    */
   const coversSomething = (x, y, w, hh) => {
-    const a = editor.toWorld({ x, y }), b = editor.toWorld({ x: x + w, y: y + hh });
-    const bar = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+    const bar = worldRect(x, y, w, hh);
     const head = editor.settings.containerHeader;
     const selected = new Set(editor.selectedNodeIds());
     const ancestors = new Set([...selected].flatMap((id) => doc.ancestors(id)));
@@ -453,6 +456,16 @@ export function createSelectionBar(editor, app, root, { palette }) {
       }
       return overlaps(bar, c);
     });
+  };
+  /** Would the bar at (x, y) sit on another link? A click meant for that link would hit a button instead. */
+  const coversLink = (x, y, w, hh) => {
+    const bar = worldRect(x, y, w, hh);
+    for (const e of doc.edges.values()) {
+      if (editor.selection.has(e.id)) continue;
+      const r = editor.router.peek(e.id);
+      if (r && overlaps(bar, r.bbox) && polylineCrossesRect(r.poly, bar)) return true;
+    }
+    return false;
   };
 
   let replaceQueued = false;
@@ -478,13 +491,17 @@ export function createSelectionBar(editor, app, root, { palette }) {
     const maxX = size.w - w - (app.inspectorOpen ? 310 : 12);
     const clampX = (v) => Math.max(70, Math.min(v, maxX));
     const midX = clampX((tl.x + br.x) / 2 - w / 2), midY = (tl.y + br.y) / 2 - hh / 2;
-    // Above the selection by default, then below, right, left: the first spot that is on
-    // screen and hides nothing you may want to grab (an element, an enclosing header).
+    // Above the selection by default (centred, then flush with either end), then below, right,
+    // left: the first spot that is on screen and hides nothing you may want to grab (an element,
+    // an enclosing header, a link). Failing that, one that at least keeps links clickable.
+    const startX = clampX(tl.x), endX = clampX(br.x - w);
     const spots = [
-      [midX, tl.y - hh - 14], [midX, br.y + 14],
+      [midX, tl.y - hh - 14], [startX, tl.y - hh - 14], [endX, tl.y - hh - 14],
+      [midX, br.y + 14], [startX, br.y + 14], [endX, br.y + 14],
       [br.x + 14, midY], [tl.x - w - 14, midY],
     ].filter(([sx, sy]) => sy >= 70 && sy <= size.h - hh - 12 && sx >= 70 && sx <= maxX);
-    const [x, y] = spots.find(([sx, sy]) => !coversSomething(sx, sy, w, hh)) ?? spots[0] ?? [midX, Math.max(br.y + 14, 70)];
+    const [x, y] = spots.find(([sx, sy]) => !coversSomething(sx, sy, w, hh) && !coversLink(sx, sy, w, hh)) ??
+      spots.find(([sx, sy]) => !coversLink(sx, sy, w, hh)) ?? spots[0] ?? [midX, Math.max(br.y + 14, 70)];
     if (y > size.h - hh - 12 || br.y < 0 || tl.y > size.h) {
       bar.classList.remove('in');
       return;

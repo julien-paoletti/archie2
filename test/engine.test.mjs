@@ -7,7 +7,7 @@ import { snapRect } from '../src/engine/snapping.js';
 import { routeOrthogonal } from '../src/engine/routing.js';
 import { EdgeRouter } from '../src/engine/router.js';
 import { layoutHierarchy, isotonic } from '../src/engine/layout.js';
-import { overlaps } from '../src/engine/geometry.js';
+import { overlaps, polylineCrossesRect } from '../src/engine/geometry.js';
 
 const schema = {
   defaultNodeType: 'box',
@@ -702,4 +702,12 @@ test('free text: stays where placed, no links, refits on edit, removed when empt
 
   ed.commitLabel(t.id, '   ');
   assert.equal(ed.doc.nodes.has(t.id), false, 'emptied text is removed');
+});
+
+test('polylineCrossesRect: passes through, ends inside, misses', () => {
+  const r = { x: 10, y: 10, w: 20, h: 10 };
+  assert.equal(polylineCrossesRect([{ x: 0, y: 15 }, { x: 40, y: 15 }], r), true);
+  assert.equal(polylineCrossesRect([{ x: 0, y: 0 }, { x: 15, y: 12 }], r), true);
+  assert.equal(polylineCrossesRect([{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 30 }], r), false);
+  assert.equal(polylineCrossesRect([{ x: 0, y: 30 }, { x: 30, y: 21 }], r), false);
 });

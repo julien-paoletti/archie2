@@ -77,6 +77,23 @@ export function distToPolyline(p, pts) {
   return best;
 }
 
+/** Does any segment of the polyline pass through the rect (Liang–Barsky clipping)? */
+export function polylineCrossesRect(pts, r) {
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], dx = pts[i].x - a.x, dy = pts[i].y - a.y;
+    let t0 = 0, t1 = 1;
+    const clip = (p, q) => {
+      if (p === 0) return q >= 0;
+      const t = q / p;
+      if (p < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      return t0 <= t1;
+    };
+    if (clip(-dx, a.x - r.x) && clip(dx, r.x + r.w - a.x) && clip(-dy, a.y - r.y) && clip(dy, r.y + r.h - a.y)) return true;
+  }
+  return false;
+}
+
 export function polylineLength(pts) {
   let total = 0;
   for (let i = 1; i < pts.length; i++) total += dist(pts[i - 1], pts[i]);
