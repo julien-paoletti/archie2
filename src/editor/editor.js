@@ -48,7 +48,7 @@ export class Editor extends Emitter {
   cursor = 'default';
   keys = { space: false };
   pointer = { x: 0, y: 0, world: { x: 0, y: 0 }, inside: false };
-  overlay = { guides: [], gaps: [], marquee: null, connect: null, dropTarget: null, insertEdge: null };
+  overlay = { guides: [], gaps: [], sideMarks: [], marquee: null, connect: null, dropTarget: null, insertEdge: null };
 
   #pasteCount = 0;
   #copyPoint = null;

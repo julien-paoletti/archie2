@@ -1,6 +1,6 @@
 import { boundariesCrossed, busMembers, isOverlay, resolveType, showsAsCard } from '../engine/schema.js';
 import { boundsOf, clamp, dist, inflate, intersects, lerpRect, union } from '../engine/geometry.js';
-import { SIDES, labelPoint, routeEdge, routeSimpleOrthogonal } from '../engine/routing.js';
+import { SIDES, labelPoint, routeEdge, routeSimpleOrthogonal, sideNormal } from '../engine/routing.js';
 import { SVGContext } from './svg-context.js';
 import { withAlpha } from './theme.js';
 
@@ -1193,6 +1193,33 @@ export class CanvasRenderer {
         ctx.moveTo(x - s, y + s); ctx.lineTo(x + s, y - s);
       }
       ctx.stroke();
+    }
+
+    // Where a sliding link end can sit: ticks at the half and quarters, dots at the thirds.
+    // Drawn just inside the side, clear of the arrowheads arriving outside it.
+    for (const s of ed.overlay.sideMarks) {
+      const { rect: r, side } = s;
+      const out = sideNormal(side), n = { x: -out.x, y: -out.y };
+      for (const m of s.marks) {
+        const p = s.axis === 'x'
+          ? { x: m.pos, y: side === 'top' ? r.y : r.y + r.h }
+          : { x: side === 'left' ? r.x : r.x + r.w, y: m.pos };
+        const hot = s.hot != null && Math.abs(s.hot - m.pos) < 0.01;
+        ctx.strokeStyle = ctx.fillStyle = hot ? th.guide : withAlpha(th.accent, 0.75);
+        ctx.beginPath();
+        if (!m.third) {
+          const len = (m.f === 0.5 ? 12 : 8) / z;
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + n.x * len, p.y + n.y * len);
+          ctx.lineWidth = (hot ? 2.5 : 2) / z;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+          ctx.lineCap = 'butt';
+        } else {
+          ctx.arc(p.x + n.x * 9 / z, p.y + n.y * 9 / z, (hot ? 3.25 : 2.5) / z, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
 
     const seen = new Set();

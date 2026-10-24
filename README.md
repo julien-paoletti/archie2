@@ -20,7 +20,7 @@ You can also host it from any static server. It has no build step and no depende
 - **Smart canvas:** magnetic grid, alignment guides, equal-spacing snapping, infinite pan and zoom (mouse, trackpad and pinch), minimap, animated zoom to fit.
 - **Automatic layout:** hierarchical and container-aware, animated, and undoable in one step.
 - **Edge routing:** orthogonal, obstacle-avoiding (A\*) routing with rounded corners. Ports are spread and shared corridors are split into lanes. Curved and straight routing are also available.
-- **Hand-made routes:** drag a link to reshape it (segments on orthogonal links, waypoints on curved and straight ones), slide labels along links, and press <kbd>R</kbd> to reset.
+- **Hand-made routes:** drag a link to reshape it (segments on orthogonal links, waypoints on curved and straight ones), slide labels along links, and press <kbd>R</kbd> to reset. A link end you slide along an element's side snaps to the quarter, third and half marks, so you can spread any number of links evenly.
 - **Deployment modeling:** Server, Virtual machine and Container start as compact cards. Drop an element onto one and it becomes a box hosting it, so Server → VM → Container → Application takes three drags.
 - **Free text:** press <kbd>T</kbd> (or use the dock) to put plain text anywhere: no box, sizes S to Title, alignment and colour. Auto layout leaves it where you put it.
 - **Firewalls:** drop a Firewall onto a link (from the dock or by dragging) to put it in the path: A → B becomes A → Firewall → B.

@@ -1,6 +1,7 @@
 import { snapRect, applyEdges } from '../engine/snapping.js';
 import { boundsOf, clamp, containsRect, dist, inflate, projectOnPolyline, rectFromPoints, snap } from '../engine/geometry.js';
 import { uid } from '../engine/document.js';
+import { sideOf } from '../engine/routing.js';
 
 /**
  * Pointer gestures. Each one owns the interaction from the moment the pointer passes the
@@ -412,6 +413,20 @@ function exitBend(r, c, axis) {
   return c > r.y && c < r.y + r.h ? null : { x: r.x + r.w / 2, y: c };
 }
 
+const SIDE_FRACTIONS = [[1 / 4, false], [1 / 3, true], [1 / 2, false], [2 / 3, true], [3 / 4, false]];
+
+/**
+ * Quarter, third and half marks on the side of `r` that a link end slides along, or null
+ * once `c` (the end's coordinate on `axis`) leaves that side. Thirds suit an even number of
+ * links, quarters and the half an odd one.
+ */
+function sideMarks(r, side, axis, c) {
+  if (!r || !side) return null;
+  const lo = r[axis], len = axis === 'x' ? r.w : r.h;
+  if (c <= lo || c >= lo + len) return null;
+  return { rect: { x: r.x, y: r.y, w: r.w, h: r.h }, side, axis, hot: null, marks: SIDE_FRACTIONS.map(([f, third]) => ({ f, third, pos: lo + len * f })) };
+}
+
 /** Drag a segment of an orthogonal link sideways; the route becomes hand-made. */
 export class SegmentGesture {
   constructor(ed, press) {
@@ -437,16 +452,33 @@ export class SegmentGesture {
   move(e) {
     const ed = this.ed, ax = this.axis;
     const w = ed.toWorld(e);
-    let c = this.start[this.whole ? 1 : this.k][ax] + (w[ax] - this.origin[ax]);
-    if (!e.alt && ed.settings.snapToGrid) c = snap(c, ed.settings.grid / 2);
+    const raw = this.start[this.whole ? 1 : this.k][ax] + (w[ax] - this.origin[ax]);
+    let c = !e.alt && ed.settings.snapToGrid ? snap(raw, ed.settings.grid / 2) : raw;
+    const edge = ed.doc.edges.get(this.id);
+    const end = (id) => ed.doc.nodes.get(ed.doc.visibleAncestor(id));
+    const last = this.start.length - 1;
+    // A segment attached to a node slides that end along its side: mark the side and snap to
+    // the marks, which beat the grid.
+    const sides = [];
+    if (this.whole || this.k === 0) sides.push(sideMarks(end(edge.source), sideOf(end(edge.source), this.start[0]), ax, raw));
+    if (this.whole || this.k + 1 === last) sides.push(sideMarks(end(edge.target), sideOf(end(edge.target), this.start[last]), ax, raw));
+    ed.overlay.sideMarks = sides.filter(Boolean);
+    if (!e.alt) {
+      let best = null, bestD = 7 / ed.camera.zoom;
+      for (const s of ed.overlay.sideMarks) {
+        for (const m of s.marks) if (Math.abs(m.pos - raw) <= bestD) { bestD = Math.abs(m.pos - raw); best = m.pos; }
+      }
+      if (best != null) {
+        c = best;
+        for (const s of ed.overlay.sideMarks) s.hot = s.marks.find((m) => Math.abs(m.pos - c) < 0.01)?.pos ?? null;
+      }
+    }
     const pts = this.start.map((p) => ({ x: p.x, y: p.y }));
     if (this.whole) pts[1][ax] = c;
     else pts[this.k][ax] = pts[this.k + 1][ax] = c;
     const bends = pts.slice(1, -1);
     // A segment attached to a node, dragged past that node's extent, leaves from the side
     // facing the drag (e.g. a vertical link pulled to the right becomes a right-side bracket).
-    const edge = ed.doc.edges.get(this.id);
-    const end = (id) => ed.doc.nodes.get(ed.doc.visibleAncestor(id));
     if (this.whole || this.k === 0) {
       const b = exitBend(end(edge.source), c, ax);
       if (b) bends.unshift(b);
@@ -460,10 +492,12 @@ export class SegmentGesture {
   }
 
   up() {
+    this.ed.overlay.sideMarks = [];
     this.ed.history.seal();
   }
 
   cancel() {
+    this.ed.overlay.sideMarks = [];
     this.ed.revertGesture(this.key);
   }
 }
