@@ -32,7 +32,7 @@ export function createCommandPalette(editor, app, { icons }) {
   const collect = () => {
     const out = [];
     for (const c of editor.commands.values()) {
-      if (c.hidden) continue;
+      if (c.hidden || !editor.allowed(c)) continue;
       out.push({ kind: 'cmd', title: c.title, group: c.group ?? 'General', keys: c.keys?.[0], run: () => editor.run(c.id), enabled: !c.enabled || c.enabled() });
     }
     for (const n of editor.doc.nodes.values()) {
@@ -109,7 +109,14 @@ export function createContextMenu(editor, app, { icons }) {
     const at = { x: x + stage.left, y: y + stage.top };
     const doc = editor.doc;
     let items;
-    if (hit?.kind === 'node' || hit?.kind === 'port' || hit?.kind === 'handle') {
+    if (editor.readOnly) {
+      // Viewing: only ways to look around.
+      items = [
+        editor.selection.size && ['fit', 'Zoom to selection', () => editor.zoomToSelection(), 'shift+2'],
+        editor.selection.size && ['deps', editor.focusDeps ? 'Hide dependencies' : 'Show dependencies', () => editor.toggleDependencies(), 'd'],
+        ['fit', 'Zoom to fit', () => editor.fitView(), 'shift+1'],
+      ];
+    } else if (hit?.kind === 'node' || hit?.kind === 'port' || hit?.kind === 'handle') {
       const nodes = editor.selectedNodeIds();
       const container = nodes.some((id) => doc.isContainer(id));
       items = [

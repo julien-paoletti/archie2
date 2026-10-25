@@ -9,6 +9,68 @@ export function resolveType(schema, node) {
   return v ? { ...t, ...v, typeLabel: t.label } : t;
 }
 
+const LIMITS = { items: 50000, id: 200, text: 20000, size: 200000 };
+
+/**
+ * Make diagram JSON from outside (a file, a shared link, storage) safe to load: arrays of
+ * plain objects, string ids, finite geometry within bounds, bounded text, known types (unknown
+ * ones fall back to the defaults), existing parents without cycles, links between existing
+ * elements. Throws on something that isn't a diagram at all; otherwise repairs quietly.
+ */
+export function sanitizeDiagram(json, schema) {
+  if (!json || typeof json !== 'object' || !Array.isArray(json.nodes)) throw new Error('not an Archie diagram (no elements)');
+  if (json.nodes.length > LIMITS.items || (json.edges?.length ?? 0) > LIMITS.items) throw new Error('too many elements');
+  const plain = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  const str = (v, max = LIMITS.text) => (typeof v === 'string' ? v.slice(0, max) : v == null ? '' : String(v).slice(0, max));
+  const num = (v, d, lo = -LIMITS.size, hi = LIMITS.size) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+  const clean = (o) => JSON.parse(JSON.stringify(plain(o), (k, v) => (typeof v === 'string' ? v.slice(0, LIMITS.text) : v)));
+  const ids = new Set();
+  const nodes = [];
+  for (const raw of json.nodes) {
+    if (!raw || typeof raw !== 'object') continue;
+    const id = str(raw.id, LIMITS.id);
+    if (!id || ids.has(id)) continue;
+    ids.add(id);
+    const type = schema.nodeTypes?.[raw.type] ? raw.type : schema.defaultNodeType;
+    const t = schema.nodeTypes?.[type] ?? {};
+    nodes.push({
+      id, type, parent: raw.parent == null ? null : str(raw.parent, LIMITS.id),
+      x: num(raw.x, 0), y: num(raw.y, 0), w: num(raw.w, t.w ?? 160, 1), h: num(raw.h, t.h ?? 80, 1),
+      label: str(raw.label), data: clean(raw.data), style: clean(raw.style),
+      ...(Number.isFinite(raw.z) ? { z: raw.z } : {}),
+      ...(raw.collapsed ? { collapsed: true, expanded: raw.expanded && Number.isFinite(raw.expanded.w) ? { w: num(raw.expanded.w, 160, 1), h: num(raw.expanded.h, 80, 1) } : null } : {}),
+    });
+  }
+  // Parents must exist, and following them must never come back round.
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const n of nodes) {
+    if (n.parent != null && !byId.has(n.parent)) n.parent = null;
+    const seen = new Set([n.id]);
+    for (let p = n.parent; p != null; p = byId.get(p)?.parent) {
+      if (seen.has(p)) {
+        n.parent = null;
+        break;
+      }
+      seen.add(p);
+    }
+  }
+  const edges = [];
+  const edgeIds = new Set();
+  for (const raw of Array.isArray(json.edges) ? json.edges : []) {
+    if (!raw || typeof raw !== 'object' || !byId.has(raw.source) || !byId.has(raw.target)) continue;
+    const id = str(raw.id, LIMITS.id);
+    if (!id || edgeIds.has(id) || ids.has(id)) continue;
+    edgeIds.add(id);
+    edges.push({
+      id, type: schema.edgeTypes?.[raw.type] ? raw.type : schema.defaultEdgeType,
+      source: raw.source, target: raw.target, label: str(raw.label), data: clean(raw.data), style: clean(raw.style),
+    });
+  }
+  const c = json.camera;
+  const camera = c && [c.x, c.y, c.zoom].every(Number.isFinite) ? { x: num(c.x, 0), y: num(c.y, 0), zoom: num(c.zoom, 1, 0.02, 8) } : null;
+  return { title: json.title == null ? null : str(json.title, 300), camera, fileDirty: !!json.fileDirty, nodes, edges };
+}
+
 /** A boundary drawn as an outline only: it surrounds things without containing them. */
 export function isOverlay(doc, node) {
   const n = typeof node === 'string' ? doc.nodes.get(node) : node;

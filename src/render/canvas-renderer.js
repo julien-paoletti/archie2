@@ -1513,7 +1513,7 @@ export class CanvasRenderer {
     const single = ed.singleSelected();
     const busy = ed.gesture && !ed.gesture.handle;
 
-    if (single && doc.nodes.has(single) && !busy && !ed.editingId && this.lod > 0) {
+    if (single && doc.nodes.has(single) && !busy && !ed.editingId && !ed.readOnly && this.lod > 0) {
       const n = this.displayRect(doc.nodes.get(single));
       const a = ed.toScreen(n), b = ed.toScreen({ x: n.x + n.w, y: n.y + n.h });
       for (const [x, y] of [[a.x, a.y], [b.x, a.y], [b.x, b.y], [a.x, b.y]]) {
@@ -1527,7 +1527,7 @@ export class CanvasRenderer {
       }
     }
 
-    if (single && doc.edges.has(single) && (!ed.gesture || ed.gesture.id === single) && !ed.editingId) {
+    if (single && doc.edges.has(single) && (!ed.gesture || ed.gesture.id === single) && !ed.editingId && !ed.readOnly) {
       // Route grips: segment pills (orthogonal), waypoints and insert points (straight/curved).
       for (const hd of ed.edgeHandles(single)) {
         const s = ed.toScreen(hd);

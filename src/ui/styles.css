@@ -359,6 +359,19 @@ kbd {
 }
 .swatch-pop.open { opacity: 1; transform: none; }
 
+/* ───────────────────────────── presenting */
+.present-bar {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  display: none; padding: 0 6px 0 7px; gap: 4px;
+}
+.presenting .present-bar { display: flex; animation: fade-up 0.25s var(--ease) both; }
+.present-bar .logo { width: 28px; height: 28px; border-radius: 8px; margin-right: 4px; }
+.present-title { max-width: 360px; padding: 0 6px; font-size: 14px; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present-badge { padding: 3px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 650; }
+.present-badge[hidden] { display: none; }
+.present-bar .btn-label .kbd { margin-left: 4px; }
+.presenting .topbar, .presenting .dock, .presenting .inspector, .presenting .selbar, .presenting .hints { display: none !important; }
+
 /* ───────────────────────────── hover card */
 .hovercard {
   position: absolute; left: 0; top: 0; width: max-content; max-width: 320px; padding: 10px 12px;

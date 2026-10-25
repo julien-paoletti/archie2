@@ -78,6 +78,7 @@ export const ui = {
   expand: 'M15 3h6v6 M9 21H3v-6 M21 3l-7 7 M3 21l7-7',
   keyboard: 'M2 6h20v12H2z M6 10h.01 M10 10h.01 M14 10h.01 M18 10h.01 M7 14h10',
   check: 'M20 6 9 17l-5-5',
+  present: 'M3 4h18v12H3z M12 16v4 M8 20h8 M10 8l4 2-4 2z',
   code: 'M8 7l-5 5 5 5 M16 7l5 5-5 5 M14 4l-4 16',
   template: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M17.5 14v7 M14 17.5h7',
   warning: 'M12 3 2 20h20z M12 10v4 M12 17h.01',

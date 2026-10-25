@@ -7,7 +7,7 @@ import { architectureSchema, icons, palette, sampleDiagram } from './domain/arch
 import { bindInput } from './ui/input.js';
 import { createGrid } from './ui/grid.js';
 import { createLabelEditor } from './ui/label-editor.js';
-import { createDock, createHints, createMinimap, createToaster, createTopBar, createViewControls } from './ui/chrome.js';
+import { createDock, createHints, createMinimap, createPresentBar, createToaster, createTopBar, createViewControls } from './ui/chrome.js';
 import { createInspector, createSelectionBar } from './ui/inspector.js';
 import { createHoverCard } from './ui/hovercard.js';
 import { createChecks } from './ui/checks.js';
@@ -19,6 +19,8 @@ import { toStructurizr } from './domain/formats/structurizr.js';
 import { toMarkdown } from './domain/formats/markdown.js';
 import { isEditable } from './ui/dom.js';
 import * as files from './ui/files.js';
+import { decodeDiagram, encodeDiagram, parseShareHash } from './ui/share.js';
+import { sanitizeDiagram } from './engine/schema.js';
 
 const TEXT_FORMATS = {
   mermaid: { name: 'Mermaid', ext: 'mmd', build: toMermaid },
@@ -65,6 +67,9 @@ class App extends Emitter {
   /** The file this diagram is bound to (File System Access API), and whether it has unsaved changes. */
   fileHandle = null;
   fileDirty = false;
+  /** Presenting: read-only, chrome hidden. A view-only link presents and never autosaves. */
+  presenting = false;
+  viewOnly = false;
 
   get colors() { return themes[this.theme]; }
   get fileName() { return this.fileHandle?.name ?? null; }
@@ -297,6 +302,40 @@ class App extends Emitter {
 
   openImport() { importDialog.open(); }
 
+  /** Present: the diagram alone, read-only, framed. A view-only link can't leave it (Edit a copy instead). */
+  present(on = !this.presenting) {
+    if (on === this.presenting || (!on && this.viewOnly)) return;
+    this.presenting = on;
+    editor.setReadOnly(on);
+    document.documentElement.classList.toggle('presenting', on);
+    this.emit('change');
+    editor.setSelection([]);
+    editor.fitView();
+  }
+
+  /** From a view-only link: keep the diagram as your own, editable (your previous one can be restored). */
+  editCopy() {
+    this.viewOnly = false;
+    history.replaceState(null, '', location.pathname + location.search);
+    this.present(false);
+    keepAsOwn('Now editing your copy');
+  }
+
+  /** Copy a link that carries the whole diagram (`view`: opens read-only, presenting). */
+  async shareLink(mode = 'edit') {
+    if (!editor.doc.nodes.size) return toast('Nothing to share yet', { icon: 'link' });
+    try {
+      const code = await encodeDiagram({ title: this.title, ...editor.toJSON() });
+      const url = `${location.origin}${location.pathname}#${mode === 'view' ? 'v' : 'd'}=${code}`;
+      if (url.length > 1_500_000) throw new Error('the diagram is too large for a link; save it as a file instead');
+      await navigator.clipboard.writeText(url);
+      const size = url.length < 10_000 ? `${url.length.toLocaleString()} characters` : `${Math.round(url.length / 1024)} KB`;
+      toast(`${mode === 'view' ? 'View-only link' : 'Link'} copied (${size}). The diagram travels in the link; nothing is uploaded.`, { icon: 'link', timeout: 5000 });
+    } catch (err) {
+      toast(`Could not copy the link: ${err.message}`, { icon: 'x', timeout: 6000 });
+    }
+  }
+
   openTemplates() { templatePicker.open(); }
   openPalette() { palette_.open(); }
   openHelp() { help.open(); }
@@ -311,9 +350,11 @@ function applyTheme() {
 }
 applyTheme();
 
-// Keep fit/zoom-to framing clear of the floating panels.
+// Keep fit/zoom-to framing clear of the floating panels (presenting hides most of them).
 const updateInsets = () => {
-  editor.camera.insets = { top: 64, left: 64, right: app.inspectorOpen && innerWidth > 700 ? 312 : 0, bottom: 52 };
+  editor.camera.insets = app.presenting
+    ? { top: 72, left: 24, right: 24, bottom: 24 }
+    : { top: 64, left: 64, right: app.inspectorOpen && innerWidth > 700 ? 312 : 0, bottom: 52 };
 };
 app.on('change', updateInsets);
 updateInsets();
@@ -329,6 +370,7 @@ bindInput(editor, canvas);
 createGrid(editor, stage);
 createLabelEditor(editor, stage);
 createTopBar(editor, app, root, { extras: [createChecks(editor)] });
+createPresentBar(editor, app, root);
 createDock(editor, app, root, icons);
 createMinimap(editor, createViewControls(editor, app, root), app);
 createHints(editor, root);
@@ -353,10 +395,14 @@ const appCommands = [
   { id: 'file.open', title: 'Open…', group: 'File', keys: ['mod+o'], run: () => app.openFile() },
   { id: 'file.save', title: 'Save', group: 'File', keys: ['mod+s'], run: () => app.save() },
   { id: 'file.saveAs', title: 'Save as…', group: 'File', keys: ['mod+shift+s'], run: () => app.saveAs() },
-  { id: 'file.png', title: 'Export PNG', group: 'File', keys: ['mod+shift+e'], run: () => app.exportPNG() },
-  { id: 'file.svg', title: 'Export SVG', group: 'File', run: () => app.exportSVG() },
-  ...Object.entries(TEXT_FORMATS).map(([k, f]) => ({ id: 'file.' + k, title: `Export ${f.name}`, group: 'File', run: () => app.exportText(k) })),
-  { id: 'file.copyMermaid', title: 'Copy as Mermaid', group: 'File', run: () => app.copyText('mermaid') },
+  // `readOnly: true`: also available while presenting or viewing a shared diagram.
+  { id: 'file.png', title: 'Export PNG', group: 'File', keys: ['mod+shift+e'], readOnly: true, run: () => app.exportPNG() },
+  { id: 'file.svg', title: 'Export SVG', group: 'File', readOnly: true, run: () => app.exportSVG() },
+  ...Object.entries(TEXT_FORMATS).map(([k, f]) => ({ id: 'file.' + k, title: `Export ${f.name}`, group: 'File', readOnly: true, run: () => app.exportText(k) })),
+  { id: 'file.copyMermaid', title: 'Copy as Mermaid', group: 'File', readOnly: true, run: () => app.copyText('mermaid') },
+  { id: 'file.share', title: 'Copy link to this diagram', group: 'File', run: () => app.shareLink('edit') },
+  { id: 'file.shareView', title: 'Copy view-only link', group: 'File', readOnly: true, run: () => app.shareLink('view') },
+  { id: 'view.present', title: 'Present (read-only)', group: 'View', keys: ['p'], run: () => app.present() },
   { id: 'file.import', title: 'Import from Mermaid…', group: 'File', run: () => app.openImport() },
   { id: 'file.sample', title: 'Load sample architecture', group: 'File', run: () => app.loadSample() },
   { id: 'debug.stress', title: 'Stress test: 2,000 nodes', group: 'File', run: () => app.stressTest() },
@@ -366,6 +412,8 @@ appCommands.forEach((c) => editor.registerCommand(c));
 editor.on('layout', () => toast('Auto layout applied', { icon: 'layout', action: { label: 'Undo', run: () => editor.undo() } }));
 editor.on('settings', () => app.savePrefs());
 editor.on('notice', ({ message, icon }) => toast(message, { icon }));
+// Esc with nothing left to undo (no selection, no focus): leave the presentation.
+editor.on('escape', () => app.present(false));
 
 // ── Clipboard: native events so copy/paste also works across tabs and windows.
 document.addEventListener('copy', (e) => {
@@ -376,14 +424,14 @@ document.addEventListener('copy', (e) => {
   e.preventDefault();
 });
 document.addEventListener('cut', (e) => {
-  if (isEditable(e.target)) return;
+  if (isEditable(e.target) || editor.readOnly) return;
   const clip = editor.cut();
   if (!clip) return;
   e.clipboardData.setData('text/plain', JSON.stringify(clip));
   e.preventDefault();
 });
 document.addEventListener('paste', (e) => {
-  if (isEditable(e.target)) return;
+  if (isEditable(e.target) || editor.readOnly) return;
   e.preventDefault();
   const text = e.clipboardData.getData('text/plain');
   // Mermaid flowchart text (or Markdown holding one): import it as elements.
@@ -416,6 +464,7 @@ stage.addEventListener('dragover', (e) => {
 });
 stage.addEventListener('drop', (e) => {
   e.preventDefault();
+  if (editor.readOnly) return;
   const type = e.dataTransfer.getData('application/x-archie-type');
   const r = stage.getBoundingClientRect();
   const at = editor.toWorld({ x: e.clientX - r.left, y: e.clientY - r.top });
@@ -431,9 +480,10 @@ stage.addEventListener('drop', (e) => {
   Promise.resolve(pending).catch(() => null).then((handle) => openJSONFile(file, handle?.kind === 'file' ? handle : null));
 });
 
-// ── Persistence: autosave the document and the view.
+// ── Persistence: autosave the document and the view (never a diagram only being viewed).
 let saveTimer = 0;
 function scheduleSave() {
+  if (app.viewOnly) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     const { x, y, zoom } = editor.camera;
@@ -446,17 +496,33 @@ editor.on('docchange', (e) => {
 });
 editor.on('camera', scheduleSave);
 
-function restore(json) {
+/** Load diagram JSON from anywhere (storage, file, link): sanitized first, so it can't break the app. */
+function restore(raw) {
+  const json = sanitizeDiagram(raw, architectureSchema);
   editor.load(json, { fit: !json.camera });
   if (json.camera) editor.camera.set(json.camera);
   app.setTitle(json.title ?? 'Untitled architecture', { edit: false });
+}
+
+/**
+ * The diagram on screen (from a link) replaces the one kept in this browser: keep the
+ * previous one restorable from the toast.
+ */
+function keepAsOwn(message) {
+  const previous = read(DOC_KEY);
+  app.bindFile(null);
+  scheduleSave();
+  if (previous?.nodes?.length) {
+    toast(message, { icon: 'link', timeout: 8000, action: { label: 'Restore yours', run: () => restore(previous) } });
+  } else {
+    toast(message, { icon: 'link' });
+  }
 }
 
 /** Open a diagram file; with a handle (native picker or drop), Save writes back to it. */
 async function openJSONFile(file, handle = null) {
   try {
     const json = JSON.parse(await file.text());
-    if (!Array.isArray(json.nodes)) throw new Error('missing nodes');
     restore({ ...json, camera: null, title: json.title ?? file.name.replace(/\.(archie\.)?json$/, '') });
     app.bindFile(handle);
     toast(`Opened ${file.name}`, { icon: 'upload' });
@@ -479,14 +545,51 @@ function slug(s) {
   return (s || 'diagram').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'diagram';
 }
 
-const saved = read(DOC_KEY);
-if (saved?.nodes?.length) {
-  restore(saved);
-  // Re-bind the file this diagram was saved to (permission is asked again on the next Save).
-  if (files.supported) files.recallHandle().then((h) => h && app.bindFile(h, { dirty: !!saved.fileDirty }));
-} else {
-  app.loadSample();
+/** The diagram kept in this browser, else the sample. */
+function openSaved() {
+  const saved = read(DOC_KEY);
+  try {
+    if (!saved?.nodes?.length) throw new Error('nothing saved');
+    restore(saved);
+    // Re-bind the file this diagram was saved to (permission is asked again on the next Save).
+    if (files.supported) files.recallHandle().then((h) => h && app.bindFile(h, { dirty: !!saved.fileDirty }));
+  } catch {
+    app.loadSample();
+  }
 }
+
+/** A diagram in the link (#d= editable copy, #v= view only), else the saved one. */
+async function start() {
+  const shared = parseShareHash(location.hash);
+  if (!shared) return openSaved();
+  await openShared(shared);
+}
+
+async function openShared(shared) {
+  try {
+    const json = await decodeDiagram(shared.data);
+    if (shared.mode === 'view') {
+      app.viewOnly = true;
+      restore({ ...json, camera: null });
+      app.present(true);
+    } else {
+      restore({ ...json, camera: null });
+      history.replaceState(null, '', location.pathname + location.search);
+      keepAsOwn('Opened the shared diagram');
+    }
+  } catch (err) {
+    app.viewOnly = false;
+    app.present(false);
+    openSaved();
+    toast(`Could not open the shared link: ${err.message}`, { icon: 'x', timeout: 7000 });
+  }
+}
+start();
+// A link pasted into this tab's address bar changes only the hash: open it too.
+window.addEventListener('hashchange', () => {
+  const shared = parseShareHash(location.hash);
+  if (shared) openShared(shared);
+});
 
 document.fonts?.ready.then(() => renderer.invalidate());
 

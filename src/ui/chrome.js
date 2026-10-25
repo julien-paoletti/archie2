@@ -57,6 +57,10 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
       ['copy', 'Copy as Mermaid', () => app.copyText('mermaid')],
       ['upload', 'Import from Mermaid…', () => app.openImport()],
       null,
+      ['link', 'Copy link to this diagram', () => app.shareLink('edit')],
+      ['link', 'Copy view-only link', () => app.shareLink('view')],
+      ['present', 'Present', () => app.present(true), 'p'],
+      null,
       ['sparkles', 'Load sample architecture', () => app.loadSample()],
       ['zap', 'Stress test (2,000 nodes)', () => app.stressTest()],
     ];
@@ -107,6 +111,38 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
   };
   for (const ev of ['history', 'tool', 'settings', 'focus']) editor.on(ev, sync);
   app.on('change', sync);
+  sync();
+}
+
+/**
+ * While presenting, the only chrome: the title, the view tools and the way out (Exit, or
+ * "Edit a copy" for a view-only link).
+ */
+export function createPresentBar(editor, app, root) {
+  const title = h('strong', { class: 'present-title' });
+  const badge = h('span', { class: 'present-badge' }, 'View only');
+  const deps = iconButton('deps', 'Dependencies  ·  D', () => editor.toggleDependencies());
+  const theme = iconButton('moon', 'Toggle theme', () => app.toggleTheme());
+  const exit = h('button', { class: 'btn btn-label', type: 'button', onclick: () => (app.viewOnly ? app.editCopy() : app.present(false)) });
+  const bar = h('div', { class: 'panel toolbar present-bar' },
+    h('div', { class: 'logo', 'aria-hidden': 'true' }, svg('M12 3 3 8l9 5 9-5z M3 16l9 5 9-5 M3 12l9 5 9-5', { size: 14, stroke: 2.2 })),
+    title, badge, h('i', { class: 'sep' }),
+    iconButton('fit', tip('Zoom to fit', 'view.fit', editor), () => editor.fitView()), deps, theme,
+    h('i', { class: 'sep' }), exit);
+  root.append(bar);
+  const sync = () => {
+    title.textContent = app.title || 'Untitled';
+    badge.hidden = !app.viewOnly;
+    deps.classList.toggle('on', editor.focusDeps);
+    theme.replaceChildren(svg(app.theme === 'dark' ? ui.sun : ui.moon));
+    exit.replaceChildren(...(app.viewOnly
+      ? [svg(ui.edit), h('span', {}, 'Edit a copy')]
+      : [svg(ui.x), h('span', {}, 'Exit'), kbd('escape')]));
+    exit.dataset.tip = app.viewOnly ? 'Keep this diagram in your browser and edit it' : 'Back to editing';
+  };
+  app.on('change', sync);
+  app.on('title', sync);
+  editor.on('focus', sync);
   sync();
 }
 

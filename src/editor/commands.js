@@ -46,7 +46,7 @@ export function createCommands(ed) {
     },
     { id: 'edit.quickAdd', title: 'Add connected node', group: 'Edit', keys: ['tab'], run: () => ed.quickAdd(ed.singleSelected()),
       enabled: () => singleNode() && !ed.schema.nodeTypes[ed.doc.nodes.get(ed.singleSelected()).type]?.noPorts },
-    { id: 'edit.escape', title: 'Deselect', group: 'Edit', keys: ['escape'], hidden: true, run: () => ed.escape() },
+    { id: 'edit.escape', title: 'Deselect', group: 'Edit', keys: ['escape'], hidden: true, readOnly: true, run: () => ed.escape() },
 
     { id: 'arrange.layout', title: 'Auto layout', group: 'Arrange', keys: ['l'], run: () => ed.autoLayout() },
     {

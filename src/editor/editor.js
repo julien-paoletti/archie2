@@ -55,6 +55,11 @@ export class Editor extends Emitter {
   overlay = { guides: [], gaps: [], sideMarks: [], marquee: null, connect: null, dropTarget: null, insertEdge: null };
   /** Dependency focus: dim everything not upstream or downstream of the selection. */
   focusDeps = false;
+  /**
+   * Read-only (presenting, view-only links): selecting, panning, zooming, hovering and the
+   * dependency focus work; anything that would change the diagram does not.
+   */
+  readOnly = false;
 
   #pasteCount = 0;
   #copyPoint = null;
@@ -113,7 +118,22 @@ export class Editor extends Emitter {
 
   run(id) {
     const cmd = this.commands.get(id);
-    if (cmd && (!cmd.enabled || cmd.enabled())) cmd.run();
+    if (cmd && this.allowed(cmd) && (!cmd.enabled || cmd.enabled())) cmd.run();
+  }
+
+  /** Whether a command may run now: in read-only mode, only view commands and those marked `readOnly`. */
+  allowed(cmd) {
+    return !this.readOnly || cmd.group === 'View' || !!cmd.readOnly;
+  }
+
+  setReadOnly(on) {
+    if (this.readOnly === on) return;
+    this.cancelGesture();
+    this.endEdit();
+    this.readOnly = on;
+    this.portNode = null;
+    this.emit('readonly', on);
+    this.invalidate();
   }
 
   setTool(tool) {
@@ -206,10 +226,11 @@ export class Editor extends Emitter {
 
   // ───────────────────────────── dependency focus
 
-  /** Esc steps back one level: deselect, then leave the dependency focus. */
+  /** Esc steps back one level: deselect, then leave the dependency focus, then tell the app (`escape`). */
   escape() {
     if (this.selection.size) this.setSelection([]);
     else if (this.focusDeps) this.toggleDependencies(false);
+    else this.emit('escape');
   }
 
   toggleDependencies(on = !this.focusDeps) {
@@ -325,7 +346,7 @@ export class Editor extends Emitter {
     const z = this.camera.zoom;
     const p = this.toWorld(sp);
     const single = this.singleSelected();
-    const selNode = single && !this.editingId ? this.doc.nodes.get(single) : null;
+    const selNode = single && !this.editingId && !this.readOnly ? this.doc.nodes.get(single) : null;
     const singleNode = selNode && !selNode.collapsed ? selNode : null;
 
     if (singleNode) {
@@ -354,7 +375,7 @@ export class Editor extends Emitter {
         if (Math.abs(p.y - n.y - n.h) <= t) return { kind: 'handle', id: n.id, handle: 's' };
       }
     }
-    if (single && this.doc.edges.has(single) && !this.editingId) {
+    if (single && this.doc.edges.has(single) && !this.editingId && !this.readOnly) {
       const r = this.router.peek(single);
       if (r) {
         if (dist(r.points[0], p) * z <= HANDLE_HIT) return { kind: 'edge-end', id: single, end: 'source' };
@@ -535,6 +556,7 @@ export class Editor extends Emitter {
     this.press = null;
     const hit = pr?.hit;
     if (!hit) return;
+    if (this.readOnly && hit.kind === 'port') return;
     if (hit.kind === 'port') {
       this.quickAdd(hit.id, hit.side);
     } else if (hit.kind === 'toggle') {
@@ -559,6 +581,13 @@ export class Editor extends Emitter {
   doubleClick(e) {
     const hit = this.hitTest(e);
     const w = this.toWorld(e);
+    if (this.readOnly) {
+      // Viewing: double-click zooms to what's under the pointer (or everything).
+      const n = hit && this.doc.nodes.get(hit.id);
+      if (n) this.zoomToRect(inflate(n, 80), { maxZoom: 1.5 });
+      else this.fitView();
+      return;
+    }
     if (!hit) {
       this.createNode(this.schema.defaultNodeType, w, { edit: true });
     } else if (hit.kind === 'handle' && this.canFitToContent([hit.id])) {
@@ -613,7 +642,7 @@ export class Editor extends Emitter {
     }
     const combo = comboOf(e);
     const cmd = this.keymap.get(combo);
-    if (!cmd) return false;
+    if (!cmd || !this.allowed(cmd)) return false;
     if (cmd.enabled && !cmd.enabled()) return combo.startsWith('mod+') || combo === 'tab';
     cmd.run();
     return true;
@@ -662,6 +691,8 @@ export class Editor extends Emitter {
   }
 
   #gestureFor(pr) {
+    // Viewing: any drag pans, except a marquee from empty canvas (selecting is harmless).
+    if (this.readOnly && pr.hit && pr.hit.kind !== 'toggle') return new PanGesture(this, pr.e);
     switch (pr.hit?.kind) {
       case 'handle': return new ResizeGesture(this, pr);
       case 'port': return new ConnectGesture(this, pr);
@@ -684,7 +715,7 @@ export class Editor extends Emitter {
     const hit = this.pointer.inside ? this.hitTest(e) : null;
     const z = this.camera.zoom;
     let portNode = null;
-    if (!this.editingId && z >= 0.3 && this.tool === 'select' && !this.keys.space && hit?.kind !== 'edge-end') {
+    if (!this.editingId && !this.readOnly && z >= 0.3 && this.tool === 'select' && !this.keys.space && hit?.kind !== 'edge-end') {
       const cur = this.portNode && this.doc.nodes.get(this.portNode);
       const sticky = cur && containsPoint(inflate(cur, HOVER_STICKY / z), this.toWorld(e)) &&
         (!hit || hit.kind === 'edge' || hit.id === cur.id || (hit.kind === 'node' && this.doc.isAncestor(hit.id, cur.id)));
@@ -705,6 +736,7 @@ export class Editor extends Emitter {
   #cursorFor(hit) {
     if (this.gesture) return this.gesture.cursor;
     if (this.keys.space || this.tool === 'hand') return 'grab';
+    if (this.readOnly) return hit?.kind === 'node' || hit?.kind === 'edge' || hit?.kind === 'toggle' ? 'pointer' : 'grab';
     if (!hit) return 'default';
     if (hit.kind === 'handle') return cursorForHandle(hit.handle);
     if (hit.kind === 'port' || hit.kind === 'edge-end') return 'crosshair';
@@ -719,7 +751,7 @@ export class Editor extends Emitter {
 
   /** Start in-place editing of a node's name (`label`) or its type label (`stereotype`). */
   editLabel(id, field = 'label') {
-    if (!id || !this.doc.has(id)) return;
+    if (!id || !this.doc.has(id) || this.readOnly) return;
     if (field === 'stereotype' && !this.doc.nodes.has(id)) field = this.doc.edges.has(id) ? 'tech' : 'label';
     if (field === 'tech' && !this.doc.edges.has(id)) field = 'label';
     this.editingId = id;
