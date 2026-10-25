@@ -133,6 +133,8 @@ kbd {
   position: absolute; top: 12px; left: 12px; right: 12px;
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
   pointer-events: none;
+  /* Above the side panels: its tooltips open downwards, over the inspector and the breadcrumb. */
+  z-index: 2;
 }
 .topbar > * { pointer-events: auto; }
 .brand { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 6px 0 7px; }
