@@ -43,6 +43,7 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
   const openMenu = (anchor) => {
     const items = [
       ['file', 'New diagram', () => app.newDiagram()],
+      ['template', 'New from template…', () => app.openTemplates()],
       ['upload', 'Open…', () => app.openFile(), 'mod+o'],
       ['download', app.fileName ? `Save to ${app.fileName}` : 'Save', () => app.save(), 'mod+s'],
       ['download', 'Save as…', () => app.saveAs(), 'mod+shift+s'],
@@ -302,7 +303,7 @@ export function createHints(editor, root) {
       }
     } else if (!editor.doc.nodes.size) {
       key = 'empty';
-      parts = [t('Double-click to add a component'), dot(), t('drag shapes from the left'), dot(), k('?'), t('shortcuts')];
+      parts = [t('Double-click to add a component'), dot(), t('drag shapes from the left'), dot(), t('or start from a template (menu)'), dot(), k('?'), t('shortcuts')];
     } else if (nodes.length === 1 && !edges.length && editor.isText(nodes[0])) {
       key = 'text';
       parts = [k('enter'), t('edit text'), dot(), k('shift+enter'), t('new line (while editing)'), dot(), t('drag a side handle to set the width')];

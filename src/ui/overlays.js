@@ -163,6 +163,37 @@ export function createContextMenu(editor, app, { icons }) {
   });
 }
 
+/** "New from template": a card per template, plus a blank diagram and the sample. */
+export function createTemplatePicker(app, { icons, templates }) {
+  const card = (icon, title, description, run) => h('button', {
+    type: 'button', class: 'tpl-card', onclick: () => { close(); run(); },
+  }, h('span', { class: 'chip' }, svg(icons[icon] ?? ui[icon], { size: 18 })), h('strong', {}, title), h('span', {}, description));
+  const box = h('div', { class: 'panel templates', role: 'dialog', 'aria-label': 'New from template' },
+    h('div', { class: 'help-head' }, h('h2', {}, 'Start from a template'),
+      h('button', { class: 'btn', type: 'button', 'aria-label': 'Close', onclick: () => close() }, svg(ui.x))),
+    h('div', { class: 'tpl-grid' },
+      ...templates.map((t) => card(t.icon, t.title, t.description, () => app.newFromTemplate(t.id))),
+      card('module', 'E-commerce platform', 'The sample: modules, a network zone, a trust boundary and a dozen services.', () => app.loadSample()),
+      card('file', 'Blank diagram', 'An empty canvas.', () => app.newDiagram())));
+  const backdrop = h('div', { class: 'backdrop' }, box);
+  document.body.append(backdrop);
+  const close = () => backdrop.classList.remove('open');
+  backdrop.addEventListener('pointerdown', (e) => { if (e.target === backdrop) close(); });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && backdrop.classList.contains('open')) {
+      e.stopPropagation();
+      close();
+    }
+  }, true);
+  return {
+    open: () => {
+      backdrop.classList.add('open');
+      requestAnimationFrame(() => box.querySelector('.tpl-card')?.focus());
+    },
+    close,
+  };
+}
+
 /** Keyboard & gesture reference, generated from the command registry. */
 export function createHelp(editor) {
   const groups = new Map();

@@ -11,7 +11,8 @@ import { createDock, createHints, createMinimap, createToaster, createTopBar, cr
 import { createInspector, createSelectionBar } from './ui/inspector.js';
 import { createHoverCard } from './ui/hovercard.js';
 import { createChecks } from './ui/checks.js';
-import { createCommandPalette, createContextMenu, createHelp } from './ui/overlays.js';
+import { createCommandPalette, createContextMenu, createHelp, createTemplatePicker } from './ui/overlays.js';
+import { templates } from './domain/templates.js';
 import { isEditable } from './ui/dom.js';
 import * as files from './ui/files.js';
 
@@ -136,10 +137,25 @@ class App extends Emitter {
   }
 
   loadSample() {
-    editor.load(sampleDiagram(), { fit: false });
+    this.#openModel(sampleDiagram(), 'E-commerce platform');
+  }
+
+  /** Start from a template; the diagram it replaces can be restored from the toast. */
+  newFromTemplate(id) {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    const json = editor.toJSON();
+    const title = this.title;
+    this.#openModel(t.build(), t.title);
+    if (json.nodes.length) toast(`New ${t.title.toLowerCase()}`, { action: { label: 'Restore', run: () => restore({ ...json, title }) }, timeout: 6000, icon: 'file' });
+  }
+
+  /** Load a model without positions: lay it out, frame it, unbind the file. */
+  #openModel(model, title) {
+    editor.load(model, { fit: false });
     editor.autoLayout({ history: false, animate: false, fit: false });
     editor.fitView({ animate: false });
-    this.setTitle('E-commerce platform', { edit: false });
+    this.setTitle(title, { edit: false });
     this.bindFile(null);
   }
 
@@ -232,6 +248,7 @@ class App extends Emitter {
     else toast('Nothing to export yet', { icon: 'image' });
   }
 
+  openTemplates() { templatePicker.open(); }
   openPalette() { palette_.open(); }
   openHelp() { help.open(); }
 }
@@ -273,6 +290,7 @@ createContextMenu(editor, app, { icons });
 const toast = createToaster(root);
 const palette_ = createCommandPalette(editor, app, { icons });
 const help = createHelp(editor);
+const templatePicker = createTemplatePicker(app, { icons, templates });
 
 const appCommands = [
   { id: 'app.palette', title: 'Command palette', group: 'View', keys: ['mod+k', '/'], run: () => app.openPalette() },
@@ -281,6 +299,7 @@ const appCommands = [
   { id: 'app.inspector', title: 'Toggle inspector', group: 'View', keys: ['i'], run: () => app.toggleInspector() },
   { id: 'app.minimap', title: 'Toggle minimap', group: 'View', keys: ['m'], run: () => app.toggleMinimap() },
   { id: 'file.new', title: 'New diagram', group: 'File', run: () => app.newDiagram() },
+  { id: 'file.template', title: 'New from template…', group: 'File', run: () => app.openTemplates() },
   { id: 'file.open', title: 'Open…', group: 'File', keys: ['mod+o'], run: () => app.openFile() },
   { id: 'file.save', title: 'Save', group: 'File', keys: ['mod+s'], run: () => app.save() },
   { id: 'file.saveAs', title: 'Save as…', group: 'File', keys: ['mod+shift+s'], run: () => app.saveAs() },
