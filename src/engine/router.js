@@ -26,6 +26,8 @@ export class EdgeRouter {
     this.margin = margin;
     this.maxObstacles = maxObstacles;
     doc.on('change', (e) => this.#onChange(e));
+    // A view changes what stands in for what (collapsed modules above it no longer do).
+    doc.on('scope', () => this.#onChange({ reset: true }));
   }
 
   beginFrame(budgetMs) {

@@ -167,6 +167,11 @@ export class Editor extends Emitter {
     }
     if (this.portNode && !this.doc.nodes.has(this.portNode)) this.portNode = null;
     if (this.editingId && !this.doc.has(this.editingId)) this.endEdit();
+    // The open view's module may have gone (deleted, ungrouped, undone): back to everything.
+    if (this.viewRoot != null && !this.canShowView(this.viewRoot)) {
+      this.doc.setScope(null);
+      this.emit('view', null);
+    }
     // The flow on show may have gone (undo) or lost steps.
     if (this.flow.id) {
       const f = this.doc.flows.get(this.flow.id);
@@ -207,7 +212,7 @@ export class Editor extends Emitter {
   #selectable(id) {
     const hidden = this.doc.hidden();
     const e = this.doc.edges.get(id);
-    if (e) return !(hidden.has(e.source) && hidden.has(e.target) && this.doc.visibleAncestor(e.source) === this.doc.visibleAncestor(e.target));
+    if (e) return this.edgeShown(e);
     return this.doc.nodes.has(id) && !hidden.has(id);
   }
 
@@ -237,13 +242,79 @@ export class Editor extends Emitter {
 
   // ───────────────────────────── dependency focus
 
-  /** Esc steps back one level: deselect, stop recording or playing a flow, leave the dependency focus, then tell the app (`escape`). */
+  /**
+   * Esc steps back one level: deselect, stop recording or playing a flow, leave the
+   * dependency focus, go up from a view, then tell the app (`escape`).
+   */
   escape() {
     if (this.selection.size) this.setSelection([]);
     else if (this.flow.recording) this.showFlow(this.flow.id);
     else if (this.flow.step >= 0) this.showFlow(this.flow.id);
     else if (this.focusDeps) this.toggleDependencies(false);
+    else if (this.viewRoot != null) this.viewUp();
     else this.emit('escape');
+  }
+
+  // ───────────────────────────── views
+
+  /** The module whose view is open (null: the whole diagram). */
+  get viewRoot() {
+    return this.doc.scope;
+  }
+
+  /** Can this node be opened as a view (a box holding things)? */
+  canOpenView(id) {
+    return this.canShowView(id) && this.doc.hasChildren(id) && id !== this.viewRoot;
+  }
+
+  /** Can an open view stay on this node (it may have been emptied meanwhile)? */
+  canShowView(id) {
+    const n = this.doc.nodes.get(id);
+    return !!n && this.doc.isContainer(n) && !showsAsCard(this.doc, n);
+  }
+
+  /**
+   * Open a module as its own view: its contents, plus what they link to outside it (faded,
+   * as context). Same model: editing here edits the diagram. null goes back to everything.
+   */
+  openView(id, { animate = true } = {}) {
+    if (id != null && !this.canOpenView(id)) return;
+    const n = id != null && this.doc.nodes.get(id);
+    if (n?.collapsed) this.toggleCollapse([id], false);
+    this.cancelGesture();
+    this.endEdit();
+    this.doc.setScope(id);
+    this.setSelection([]);
+    this.emit('view', this.viewRoot);
+    this.fitView({ animate });
+    this.invalidate();
+  }
+
+  /** Up one level: the view of the module around this one, or the whole diagram. */
+  viewUp() {
+    const root = this.viewRoot;
+    if (root == null) return;
+    const parent = this.doc.ancestors(root).find((a) => this.canOpenView(a));
+    const was = root;
+    this.openView(parent ?? null);
+    this.setSelection([was]);
+  }
+
+  /** The chain of modules from the top down to the open view (for a breadcrumb). */
+  viewPath() {
+    const root = this.viewRoot;
+    return root == null ? [] : [...this.doc.ancestors(root).reverse(), root].filter((id) => this.doc.isContainer(id));
+  }
+
+  /** Shown as context in the open view (outside it, linked to it). */
+  isContext(id) {
+    return this.viewRoot != null && this.doc.context().has(id);
+  }
+
+  /** Bounds of what is shown (the view, or everything). */
+  visibleBounds() {
+    const hidden = this.doc.hidden();
+    return boundsOf([...this.doc.nodes.values()].filter((n) => !hidden.has(n.id)));
   }
 
   // ───────────────────────────── flows
@@ -529,7 +600,7 @@ export class Editor extends Emitter {
     let best = null, bestD = tol, selected = null;
     for (const e of this.doc.edges.values()) {
       const r = this.router.peek(e.id);
-      if (!r) continue;
+      if (!r || !this.edgeShown(e)) continue;
       const tag = this.layoutProbe?.labelRect?.(e.id);
       if (tag) {
         if (containsPoint(tag, p)) return { kind: 'edge', id: e.id, label: true };
@@ -586,6 +657,13 @@ export class Editor extends Emitter {
     return isOverlay(this.doc, id);
   }
 
+  /** Is a link on screen: both ends (or what stands in for them) shown, and not the same? */
+  edgeShown(e) {
+    const hidden = this.doc.hidden();
+    const s = this.doc.visibleAncestor(e.source), t = this.doc.visibleAncestor(e.target);
+    return s !== t && !hidden.has(s) && !hidden.has(t);
+  }
+
   /** Top-most visible node containing a world point. Prefers leaves over containers. */
   nodeAt(p, { exclude = null, leavesOnly = false } = {}) {
     const hidden = this.doc.hidden();
@@ -605,18 +683,23 @@ export class Editor extends Emitter {
     return leaf ?? (leavesOnly ? null : box);
   }
 
-  /** Deepest expanded container under a world point, ignoring `exclude` (e.g. the nodes being dragged). */
+  /**
+   * Deepest expanded container under a world point, ignoring `exclude` (e.g. the nodes being
+   * dragged). In a view, things dropped or created outside every box go into the view's
+   * module (anywhere else they would vanish from the view); context boxes don't take drops.
+   */
   containerAt(p, exclude = null) {
     const hidden = this.doc.hidden();
     let best = null, bestI = -1;
     for (const id of this.doc.index.query({ x: p.x, y: p.y, w: 0, h: 0 })) {
-      if (exclude?.has(id) || hidden.has(id)) continue;
+      if (exclude?.has(id) || hidden.has(id) || this.isContext(id)) continue;
       const n = this.doc.nodes.get(id);
       if (!this.doc.isContainer(n) || n.collapsed || !containsPoint(n, p)) continue;
       const i = this.doc.orderIndex(id);
       if (i > bestI) { best = n; bestI = i; }
     }
-    return best;
+    const root = this.viewRoot;
+    return best ?? (root != null && !exclude?.has(root) ? this.doc.nodes.get(root) : null);
   }
 
   // ───────────────────────────── input
@@ -1028,7 +1111,7 @@ export class Editor extends Emitter {
     const tol = 10 / this.camera.zoom;
     let best = null, bestD = tol;
     for (const e of this.doc.edges.values()) {
-      if (exclude?.has(e.source) || exclude?.has(e.target)) continue;
+      if (exclude?.has(e.source) || exclude?.has(e.target) || !this.edgeShown(e)) continue;
       if (this.doc.visibleAncestor(e.source) !== e.source || this.doc.visibleAncestor(e.target) !== e.target) continue;
       const r = this.router.peek(e.id);
       if (!r || !containsPoint(inflate(r.bbox, tol), p)) continue;
@@ -1469,7 +1552,8 @@ export class Editor extends Emitter {
     const b = scratch.bounds();
     if (!b) return [];
     const g = this.settings.snapToGrid ? this.settings.grid : 1;
-    const top = this.insertSnapshot(clip, snap(at.x - b.w / 2, g) - b.x, snap(at.y - b.h / 2, g) - b.y, () => null);
+    const into = this.containerAt(at)?.id ?? null;
+    const top = this.insertSnapshot(clip, snap(at.x - b.w / 2, g) - b.x, snap(at.y - b.h / 2, g) - b.y, () => into);
     this.setSelection(top);
     this.zoomToRect(inflate(this.selectionBounds(), 60), { maxZoom: Math.max(this.camera.zoom, 1) });
     return top;
@@ -1694,9 +1778,11 @@ export class Editor extends Emitter {
     if (history) this.emit('layout', { scope });
   }
 
+  /** What auto layout arranges: the selected box, else the open view's module, else everything. */
   #layoutScope() {
     const id = this.singleSelected();
-    return id && this.doc.isContainer(id) && this.doc.hasChildren(id) ? id : null;
+    if (id && this.doc.isContainer(id) && this.doc.hasChildren(id)) return id;
+    return this.viewRoot;
   }
 
   // ───────────────────────────── view
@@ -1716,7 +1802,7 @@ export class Editor extends Emitter {
   }
 
   fitView({ animate = true } = {}) {
-    const b = this.doc.bounds();
+    const b = this.visibleBounds();
     if (b) this.zoomToRect(b, { animate });
     else this.camera.set({ x: -this.camera.size.w / 2, y: -this.camera.size.h / 2, zoom: 1 }, { animate });
   }
@@ -1739,9 +1825,13 @@ export class Editor extends Emitter {
     this.camera.set(this.camera.fitRect(rect, { maxZoom: this.camera.zoom }), { animate: true });
   }
 
-  /** Select a node or edge and bring it into view. */
+  /** Select a node or edge and bring it into view (leaving a view that doesn't show it). */
   reveal(id) {
     const e = this.doc.edges.get(id);
+    const ends = e ? [e.source, e.target] : [id];
+    if (this.viewRoot != null && ends.some((n) => this.doc.hidden().has(this.doc.visibleAncestor(n)) && !this.isContext(n))) {
+      this.openView(null, { animate: false });
+    }
     const collapsed = [e?.source ?? id, e?.target].filter(Boolean)
       .flatMap((n) => this.doc.ancestors(n)).filter((a) => this.doc.nodes.get(a).collapsed);
     if (collapsed.length) this.toggleCollapse([...new Set(collapsed)], false);
@@ -1758,6 +1848,8 @@ export class Editor extends Emitter {
     this.doc.load(json);
     this.history.clear();
     this.setSelection([]);
+    this.showFlow(null);
+    this.emit('view', null);
     if (fit) this.fitView({ animate: false });
   }
 

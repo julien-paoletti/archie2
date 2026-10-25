@@ -212,6 +212,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
       (incoming.length || outgoing.length) && section(`Connections · ${incoming.length + outgoing.length}`,
         h('div', { class: 'conns' }, ...outgoing.map((e) => link(e, e.target)), ...incoming.map((e) => link(e, e.source)))),
       section(null, h('div', { class: 'actions' },
+        editor.canOpenView(n.id) && action('enter', 'Open as a view', () => editor.openView(n.id), 'o'),
         t.container && doc.hasChildren(n.id) && !n.collapsed && action('layout', 'Layout contents', () => editor.autoLayout(), 'l'),
         editor.canFitToContent([n.id]) && action('fitContent', 'Fit to content', () => editor.fitToContent([n.id]), 'f'),
         doc.isContainer(n) && !editor.showsAsCard(n.id) && action(n.collapsed ? 'expand' : 'collapse', n.collapsed ? 'Expand' : 'Collapse', () => editor.toggleCollapse([n.id]), 'c'),
@@ -486,6 +487,7 @@ export function createSelectionBar(editor, app, root, { palette }) {
       const n = doc.nodes.get(nodes[0]);
       items.push(colorBtn(nodes), btn('edit', (editor.isText(n.id) ? 'Edit text' : 'Rename') + '  ·  Enter', () => editor.editLabel(n.id)));
       if (!editor.schema.nodeTypes[n.type]?.noPorts) items.push(btn('link', 'Add connected  ·  Tab', () => editor.quickAdd(n.id)), depsBtn('Dependencies'));
+      if (editor.canOpenView(n.id)) items.push(btn('enter', 'Open as a view  ·  O', () => editor.openView(n.id)));
       if (doc.isContainer(n) && doc.hasChildren(n.id) && !n.collapsed) items.push(btn('layout', 'Layout contents  ·  L', () => editor.autoLayout()));
       if (editor.canFitToContent([n.id])) items.push(btn('fitContent', 'Fit to content  ·  F', () => editor.fitToContent([n.id])));
       if (doc.isContainer(n) && !editor.showsAsCard(n.id)) items.push(btn(n.collapsed ? 'expand' : 'collapse', (n.collapsed ? 'Expand' : 'Collapse') + '  ·  C', () => editor.toggleCollapse([n.id])));

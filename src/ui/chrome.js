@@ -114,6 +114,30 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
   sync();
 }
 
+/** Where you are when a module is open as a view: Overview › Module › Sub-module. */
+export function createBreadcrumb(editor, root) {
+  const bar = h('nav', { class: 'panel crumbs', 'aria-label': 'View' });
+  root.append(bar);
+  const doc = editor.doc;
+  const sync = () => {
+    const path = editor.viewPath();
+    bar.classList.toggle('in', path.length > 0);
+    if (!path.length) return;
+    const crumb = (label, id, current) => current
+      ? h('strong', { class: 'crumb' }, label)
+      : h('button', { type: 'button', class: 'crumb', onclick: () => editor.openView(id) }, label);
+    const name = (id) => doc.nodes.get(id)?.label || 'Untitled';
+    bar.replaceChildren(
+      svg(ui.layers, { size: 15 }),
+      crumb('Overview', null, false),
+      ...path.flatMap((id, i) => [h('span', { class: 'crumb-sep' }, '›'), crumb(name(id), id, i === path.length - 1)]),
+      h('span', { class: 'crumb-hint' }, kbd('escape'), ' up'));
+  };
+  editor.on('view', sync);
+  editor.on('docchange', () => { if (editor.viewRoot != null) sync(); });
+  sync();
+}
+
 /** While a flow plays: which step, what happens, previous / next, stop. */
 export function createFlowPlayer(editor, root) {
   const name = h('strong', { class: 'fp-name' });
@@ -294,7 +318,7 @@ export function createMinimap(editor, wrap, app) {
     if (!app.minimapOpen) return;
     const doc = editor.doc;
     const view = editor.camera.viewRect();
-    const content = doc.bounds();
+    const content = editor.visibleBounds();
     const world = inflate(content ? union(content, view) : view, 80);
     const s = Math.min(W / world.w, H / world.h);
     const ox = (W - world.w * s) / 2 - world.x * s, oy = (H - world.h * s) / 2 - world.y * s;
@@ -391,6 +415,9 @@ export function createHints(editor, root) {
         key = `deps:path:${f.found}`;
         parts = [t(f.found ? 'Paths between the two highlighted' : 'No path between these two'), ...exit];
       }
+    } else if (editor.viewRoot != null && !nodes.length && !edges.length) {
+      key = 'view';
+      parts = [t('A view of one module: what it links to outside is shown faded'), dot(), t('select a module and press'), k('o'), t('to open it'), dot(), k('escape'), t('up a level')];
     } else if (!editor.doc.nodes.size) {
       key = 'empty';
       parts = [t('Double-click to add a component'), dot(), t('drag shapes from the left'), dot(), t('or start from a template (menu)'), dot(), k('?'), t('shortcuts')];
@@ -417,7 +444,7 @@ export function createHints(editor, root) {
     el.replaceChildren(...parts);
     el.classList.add('in');
   };
-  for (const ev of ['selectionchange', 'gesture', 'docchange', 'focus', 'flow']) editor.on(ev, update);
+  for (const ev of ['selectionchange', 'gesture', 'docchange', 'focus', 'flow', 'view']) editor.on(ev, update);
   update();
 }
 

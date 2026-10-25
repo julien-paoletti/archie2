@@ -181,7 +181,7 @@ export class CanvasRenderer {
     let b = boundsOf([...doc.nodes.values()].filter((n) => !hidden.has(n.id)));
     if (!b) return null;
     for (const e of doc.edges.values()) {
-      if (doc.visibleAncestor(e.source) !== doc.visibleAncestor(e.target)) b = union(b, router.get(e.id).bbox);
+      if (this.ed.edgeShown(e)) b = union(b, router.get(e.id).bbox);
     }
     return inflate(b, padding);
   }
@@ -339,7 +339,7 @@ export class CanvasRenderer {
     for (const e of doc.edges.values()) {
       if (ed.overlay.connect?.edgeId === e.id) continue;
       const sid = doc.visibleAncestor(e.source), tid = doc.visibleAncestor(e.target);
-      if (sid === tid && e.source !== e.target) continue;
+      if ((sid === tid && e.source !== e.target) || hidden.has(sid) || hidden.has(tid)) continue;
       const proxied = sid !== e.source || tid !== e.target;
       if (proxied) {
         const key = sid + '>' + tid;
@@ -421,9 +421,11 @@ export class CanvasRenderer {
 
   /** Opacity under the dependency focus: whatever it leaves out fades back. */
   #fade(id, kind) {
-    if (this.#exporting) return 1;
+    // Context of a view (outside it, linked to it): shown, but quieter, exports included.
+    const context = kind === 'node' && this.ed.isContext(id) ? 0.55 : 1;
+    if (this.#exporting) return context;
     const lit = !this.#focus || (kind === 'edge' ? this.#focus.edges : this.#focus.nodes).has(id);
-    return 1 - 0.82 * this.#fx.value('f' + id, lit ? 0 : 1, 14);
+    return context * (1 - 0.82 * this.#fx.value('f' + id, lit ? 0 : 1, 14));
   }
 
   #state(id, kind) {

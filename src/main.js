@@ -7,7 +7,7 @@ import { architectureSchema, icons, palette, sampleDiagram } from './domain/arch
 import { bindInput } from './ui/input.js';
 import { createGrid } from './ui/grid.js';
 import { createLabelEditor } from './ui/label-editor.js';
-import { createDock, createFlowPlayer, createHints, createMinimap, createPresentBar, createToaster, createTopBar, createViewControls } from './ui/chrome.js';
+import { createBreadcrumb, createDock, createFlowPlayer, createHints, createMinimap, createPresentBar, createToaster, createTopBar, createViewControls } from './ui/chrome.js';
 import { flowToMermaidSequence } from './domain/formats/sequence.js';
 import { createInspector, createSelectionBar } from './ui/inspector.js';
 import { createHoverCard } from './ui/hovercard.js';
@@ -383,6 +383,7 @@ createLabelEditor(editor, stage);
 createTopBar(editor, app, root, { extras: [createChecks(editor)] });
 createPresentBar(editor, app, root);
 createFlowPlayer(editor, root);
+createBreadcrumb(editor, root);
 createDock(editor, app, root, icons);
 createMinimap(editor, createViewControls(editor, app, root), app);
 createHints(editor, root);
@@ -499,7 +500,7 @@ function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     const { x, y, zoom } = editor.camera;
-    write(DOC_KEY, { title: app.title, camera: { x, y, zoom }, fileDirty: app.fileDirty, ...editor.toJSON() });
+    write(DOC_KEY, { title: app.title, camera: { x, y, zoom }, view: editor.viewRoot, fileDirty: app.fileDirty, ...editor.toJSON() });
   }, 400);
 }
 editor.on('docchange', (e) => {
@@ -507,11 +508,13 @@ editor.on('docchange', (e) => {
   scheduleSave();
 });
 editor.on('camera', scheduleSave);
+editor.on('view', scheduleSave);
 
 /** Load diagram JSON from anywhere (storage, file, link): sanitized first, so it can't break the app. */
 function restore(raw) {
   const json = sanitizeDiagram(raw, architectureSchema);
   editor.load(json, { fit: !json.camera });
+  if (json.view && editor.canOpenView(json.view)) editor.openView(json.view, { animate: false });
   if (json.camera) editor.camera.set(json.camera);
   app.setTitle(json.title ?? 'Untitled architecture', { edit: false });
 }

@@ -94,6 +94,9 @@ export function createCommands(ed) {
     { id: 'nudge.down5', title: 'Nudge down ×5', hidden: true, keys: ['shift+arrowdown'], run: nudge(0, 5) },
 
     { id: 'view.dependencies', title: 'Show dependencies (dim the rest)', group: 'View', keys: ['d'], run: () => ed.toggleDependencies() },
+    { id: 'view.open', title: 'Open module as a view', group: 'View', keys: ['o'], run: () => ed.openView(ed.singleSelected()), enabled: () => ed.canOpenView(ed.singleSelected()) },
+    { id: 'view.up', title: 'Go up a level', group: 'View', run: () => ed.viewUp(), enabled: () => ed.viewRoot != null },
+    { id: 'view.overview', title: 'Show the whole diagram', group: 'View', run: () => ed.openView(null), enabled: () => ed.viewRoot != null },
     { id: 'view.fit', title: 'Zoom to fit', group: 'View', keys: ['shift+1'], run: () => ed.fitView() },
     { id: 'view.fitSelection', title: 'Zoom to selection', group: 'View', keys: ['shift+2'], run: () => ed.zoomToSelection(), enabled: hasAny },
     { id: 'view.actual', title: 'Zoom to 100%', group: 'View', keys: ['shift+0'], run: () => ed.zoomTo(1) },

@@ -162,7 +162,8 @@ export class DragGesture {
     ed.doc.transact('Move', () => {
       for (const id of this.ids) {
         const n = ed.doc.nodes.get(id);
-        if (n && !ed.isOverlay(id) && (n.parent ?? null) !== this.target) ed.doc.update(id, { parent: this.target, z: ed.doc.nextZ() });
+        // Context elements of a view (outside it) are only moved, never re-parented into it.
+        if (n && !ed.isOverlay(id) && !ed.isContext(id) && id !== ed.viewRoot && (n.parent ?? null) !== this.target) ed.doc.update(id, { parent: this.target, z: ed.doc.nextZ() });
       }
       if (intoCard) ed.adoptIntoHost(this.target, this.ids);
       if (ed.overlay.insertEdge) ed.insertIntoEdge(this.ids[0], ed.overlay.insertEdge, this.dropPoint);

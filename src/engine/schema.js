@@ -79,7 +79,8 @@ export function sanitizeDiagram(json, schema) {
   }
   const c = json.camera;
   const camera = c && [c.x, c.y, c.zoom].every(Number.isFinite) ? { x: num(c.x, 0), y: num(c.y, 0), zoom: num(c.zoom, 1, 0.02, 8) } : null;
-  return { title: json.title == null ? null : str(json.title, 300), camera, fileDirty: !!json.fileDirty, nodes, edges, flows };
+  const view = typeof json.view === 'string' && byId.has(json.view) ? json.view : null;
+  return { title: json.title == null ? null : str(json.title, 300), camera, view, fileDirty: !!json.fileDirty, nodes, edges, flows };
 }
 
 /** A boundary drawn as an outline only: it surrounds things without containing them. */

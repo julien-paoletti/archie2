@@ -78,6 +78,8 @@ export const ui = {
   expand: 'M15 3h6v6 M9 21H3v-6 M21 3l-7 7 M3 21l7-7',
   keyboard: 'M2 6h20v12H2z M6 10h.01 M10 10h.01 M14 10h.01 M18 10h.01 M7 14h10',
   check: 'M20 6 9 17l-5-5',
+  layers: 'M12 3 3 8l9 5 9-5z M3 16l9 5 9-5 M3 12l9 5 9-5',
+  enter: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4 M10 17l5-5-5-5 M15 12H3',
   play: 'M7 4v16l13-8z',
   prev: 'M18 5v14L7 12z M6 5v14',
   next: 'M6 5v14l11-7z M18 5v14',

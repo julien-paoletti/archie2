@@ -124,6 +124,7 @@ export function createContextMenu(editor, app, { icons }) {
       const nodes = editor.selectedNodeIds();
       const container = nodes.some((id) => doc.isContainer(id));
       items = [
+        nodes.length === 1 && editor.canOpenView(nodes[0]) && ['enter', 'Open as a view', () => editor.openView(nodes[0]), 'o'],
         nodes.length === 1 && ['edit', 'Rename', () => editor.editLabel(nodes[0]), 'enter'],
         nodes.length === 1 && ['link', 'Add connected node', () => editor.quickAdd(nodes[0]), 'tab'],
         ['copy', 'Duplicate', () => editor.duplicate(), 'mod+d'],
@@ -162,6 +163,8 @@ export function createContextMenu(editor, app, { icons }) {
     } else {
       const types = Object.entries(editor.schema.nodeTypes).slice(0, 6);
       items = [
+        editor.viewRoot != null && ['layers', 'Go up a level', () => editor.viewUp(), 'escape'],
+        editor.viewRoot != null && '-',
         ...types.map(([type, t]) => [icons[t.icon], `Add ${t.label.toLowerCase()}`, () => editor.createNode(type, world, { edit: true }), t.shortcut]),
         '-',
         editor.clipboard && ['copy', 'Paste here', () => editor.paste(), 'mod+v'],

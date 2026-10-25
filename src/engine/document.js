@@ -84,7 +84,8 @@ export class DiagramDocument extends Emitter {
   #orderIndex = null;
   #tx = null;
   #z = 0;
-  #hidden = { version: -1, set: new Set() };
+  #hidden = { key: '', set: new Set(), context: new Set() };
+  #scope = { root: null, version: 0 };
 
   constructor(schema = {}) {
     super();
@@ -184,22 +185,70 @@ export class DiagramDocument extends Emitter {
     return this.#orderIndex.get(id) ?? -1;
   }
 
-  /** Ids of nodes inside a collapsed container (cached per document version). */
+  /**
+   * Show only a container's contents (a view of one module), plus their direct neighbours
+   * outside it as context. null shows everything. A view is a way of looking: nothing in
+   * the document changes, and it is not undoable.
+   */
+  setScope(root) {
+    const next = root != null && this.nodes.has(root) ? root : null;
+    if (next === this.#scope.root) return;
+    this.#scope = { root: next, version: this.#scope.version + 1 };
+    this.emit('scope', next);
+  }
+
+  get scope() {
+    return this.#scope.root;
+  }
+
+  /**
+   * Ids of nodes not shown: inside a collapsed container, or outside the scope (except the
+   * context). Cached per document version and scope.
+   */
   hidden() {
-    if (this.#hidden.version !== this.version) {
-      const set = new Set();
-      for (const n of this.nodes.values()) {
-        if (n.collapsed && !set.has(n.id)) for (const d of this.descendants(n.id)) set.add(d);
-      }
-      this.#hidden = { version: this.version, set };
-    }
+    this.#computeHidden();
     return this.#hidden.set;
   }
 
-  /** The node itself, or its outermost collapsed ancestor: what stands in for it on screen. */
+  /** Nodes shown as context in a scoped view: outside it, linked to something inside. */
+  context() {
+    this.#computeHidden();
+    return this.#hidden.context;
+  }
+
+  #computeHidden() {
+    const key = this.version + ':' + this.#scope.version;
+    if (this.#hidden.key === key) return;
+    const root = this.#scope.root;
+    const set = new Set(), context = new Set();
+    // Above the scope, collapsing doesn't matter: the view shows the root's contents anyway.
+    const above = root ? new Set([root, ...this.ancestors(root)]) : new Set();
+    for (const n of this.nodes.values()) {
+      if (n.collapsed && !above.has(n.id) && !set.has(n.id)) for (const d of this.descendants(n.id)) set.add(d);
+    }
+    if (root) {
+      const members = new Set([root, ...this.descendants(root)]);
+      for (const id of members) {
+        for (const e of this.edgesOf(id)) {
+          const other = e.source === id ? e.target : e.source;
+          if (!members.has(other)) context.add(this.visibleAncestor(other));
+        }
+      }
+      for (const id of this.nodes.keys()) if (!members.has(id) && !context.has(id)) set.add(id);
+    }
+    this.#hidden = { key, set, context };
+  }
+
+  /**
+   * The node itself, or its outermost collapsed ancestor: what stands in for it on screen.
+   * In a scoped view, ancestors from the scope root up don't count.
+   */
   visibleAncestor(id) {
     let v = id;
-    for (const a of this.ancestors(id)) if (this.nodes.get(a).collapsed) v = a;
+    for (const a of this.ancestors(id)) {
+      if (a === this.#scope.root) break;
+      if (this.nodes.get(a).collapsed) v = a;
+    }
     return v;
   }
 
@@ -568,5 +617,6 @@ export class DiagramDocument extends Emitter {
     this.#adjacency.clear();
     this.#order = null;
     this.#z = 0;
+    this.#scope = { root: null, version: this.#scope.version + 1 };
   }
 }
