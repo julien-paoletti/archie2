@@ -168,3 +168,22 @@ test('editor: an imported model is laid out, placed at the pointer and undone in
   ed.undo();
   assert.equal(ed.doc.nodes.size, 1);
 });
+
+test('Mermaid import stays fast on hostile input', async () => {
+  const { looksLikeMermaid, extractMermaid } = await import('../src/domain/formats/mermaid.js');
+  const fast = (label, fn) => {
+    const t0 = performance.now();
+    try { fn(); } catch { /* errors are fine, hangs are not */ }
+    const ms = performance.now() - t0;
+    assert.ok(ms < 250, `${label}: ${ms.toFixed(0)} ms`);
+  };
+  fast('spaces after a text arrow', () => fromMermaid('flowchart LR\nA --' + ' '.repeat(9000) + 'x'));
+  fast('many space runs', () => fromMermaid('flowchart LR\nA -- ' + 'a '.repeat(4900) + 'b'));
+  fast('header scan over many lines', () => looksLikeMermaid('\n'.repeat(500000) + 'x'));
+  fast('unclosed tags in a label', () => fromMermaid('flowchart LR\nA["' + '<a'.repeat(4000) + '"]'));
+  fast('many ```mermaid openings', () => extractMermaid('```mermaid'.repeat(80000)));
+  fast('a huge & cross product', () => fromMermaid('flowchart LR\n' + Array.from({ length: 1000 }, (_, i) => 'a' + i).join(' & ') + ' --> ' + Array.from({ length: 1000 }, (_, i) => 'b' + i).join(' & ')));
+  assert.throws(() => fromMermaid('flowchart LR\n' + 'x'.repeat(10001)), /Line 2: too long/);
+  assert.throws(() => fromMermaid('flowchart LR\nA -- dangling'), /Line 2: no arrow after/);
+  assert.equal(looksLikeMermaid('flowchart LR\n' + 'x'.repeat(1024 * 1024)), false, 'too big to be worth trying');
+});

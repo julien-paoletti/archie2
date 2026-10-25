@@ -57,17 +57,22 @@ export function toMermaid(doc, { direction = 'LR' } = {}) {
 
 // ───────────────────────────── import
 
-const HEADER = /^\s*(flowchart|graph)\s*(TB|TD|BT|LR|RL)?\s*;?\s*$/im;
+// Pasted text can be anything, and large: no pattern here may backtrack across lines or runs.
+const MAX_TEXT = 1024 * 1024, MAX_LINE = 10000, MAX_ITEMS = 50000;
+const HEADER = /^[ \t]*(flowchart|graph)[ \t]*(TB|TD|BT|LR|RL)?[ \t]*;?[ \t]*$/im;
 
 /** Does this text hold a Mermaid flowchart (on its own, or in a ```mermaid block)? */
 export function looksLikeMermaid(text) {
-  return HEADER.test(extractMermaid(text) ?? '');
+  return String(text ?? '').length <= MAX_TEXT && HEADER.test(extractMermaid(text));
 }
 
 /** The flowchart in a text: the first ```mermaid block of a Markdown file, else the text itself. */
 export function extractMermaid(text) {
-  const block = /```mermaid[^\n]*\n([\s\S]*?)```/.exec(String(text ?? ''));
-  return block ? block[1] : String(text ?? '');
+  const s = String(text ?? '');
+  const open = s.indexOf('```mermaid');
+  const start = open < 0 ? -1 : s.indexOf('\n', open);
+  const end = start < 0 ? -1 : s.indexOf('```', start + 1);
+  return end < 0 ? s : s.slice(start + 1, end);
 }
 
 /** Node shapes, longest delimiters first so `[(` wins over `[`. */
@@ -78,8 +83,11 @@ const OPENERS = [
 ];
 // Arrows: --> ---> --- -.-> -.- ==> === --o --x (any length), with an optional |label|.
 const EDGE = /^\s*(<?)(-{2,}>|-{3,}|-\.+->|-\.+-|={2,}>|={3,}|-{2,}[ox]|={2,}[ox]|-\.+-[ox])(?:\|([^|]*)\|)?\s*/;
-// Text in the middle: A -- label --> B, A -. label .-> B, A == label ==> B.
-const TEXT_EDGE = /^\s*(<?)(--|-\.|==)\s+(.+?)\s+(-{2,}>|-{3,}|\.-+>|\.-+|={2,}>|={3,})\s*/;
+// Text in the middle: A -- label --> B, A -. label .-> B, A == label ==> B. Read in two steps
+// (the opening, then the first closing arrow after it): one pattern with the label in between
+// backtracks badly on long runs of spaces.
+const TEXT_OPEN = /^[ \t]*(<?)(--|-\.|==)[ \t]+(?=\S)/;
+const TEXT_CLOSE = /(?<![ \t])[ \t]+(-{2,}>|-{3,}|\.-+>|\.-+|={2,}>|={3,})[ \t]*/g;
 // Names: letters, digits, underscores, and single dashes inside (my-node), never an arrow.
 const ID = /^\s*([A-Za-z0-9_]+(?:-(?![-.>=\s])[A-Za-z0-9_]+)*)/;
 
@@ -89,6 +97,7 @@ const ID = /^\s*([A-Za-z0-9_]+(?:-(?![-.>=\s])[A-Za-z0-9_]+)*)/;
  * `flowchart` / `graph` header is an error. Throws Error with a line number when stuck.
  */
 export function fromMermaid(text) {
+  if (String(text).length > MAX_TEXT) throw new Error('too long to import (over 1 MB)');
   const src = String(text).replace(/\r/g, '').split('\n');
   const nodes = new Map(), edges = [];
   const stack = [];
@@ -144,6 +153,7 @@ export function fromMermaid(text) {
 
   src.forEach((raw, i) => {
     const lineNo = i + 1;
+    if (raw.length > MAX_LINE) throw new Error(`Line ${lineNo}: too long`);
     const line = raw.replace(/%%.*$/, '').replace(/:::[\w-]+/g, '').trim().replace(/;$/, '');
     if (!line) return;
     if (!header) {
@@ -176,11 +186,16 @@ export function fromMermaid(text) {
     let [from, rest] = readGroup(line, lineNo);
     for (;;) {
       if (!rest.trim()) break;
-      let m = EDGE.exec(rest), arrow, label;
-      if (m) [arrow, label] = [m[2], m[3]];
-      else if ((m = TEXT_EDGE.exec(rest))) [arrow, label] = [m[4], m[3]];
-      else throw new Error(`Line ${lineNo}: can't read "${rest.trim()}"`);
-      const [to, after] = readGroup(rest.slice(m[0].length), lineNo);
+      let m = EDGE.exec(rest), arrow, label, used;
+      if (m) [arrow, label, used] = [m[2], m[3], m[0].length];
+      else if ((m = TEXT_OPEN.exec(rest))) {
+        TEXT_CLOSE.lastIndex = m[0].length;
+        const c = TEXT_CLOSE.exec(rest);
+        if (!c) throw new Error(`Line ${lineNo}: no arrow after "${rest.trim().slice(0, 60)}"`);
+        [arrow, label, used] = [c[1], rest.slice(m[0].length, c.index), c.index + c[0].length];
+      } else throw new Error(`Line ${lineNo}: can't read "${rest.trim().slice(0, 60)}"`);
+      const [to, after] = readGroup(rest.slice(used), lineNo);
+      if (edges.length + from.length * to.length > MAX_ITEMS || nodes.size > MAX_ITEMS) throw new Error(`Line ${lineNo}: too many elements`);
       for (const s of from) for (const t of to) edges.push(edgeOf(s, t, arrow, label));
       [from, rest] = [to, after];
     }
@@ -217,5 +232,5 @@ function findClose(s, from, close) {
 /** Label text: quotes dropped, entities and <br> turned back into characters. */
 function unescape(label) {
   return String(label).trim().replace(/^"(.*)"$/s, '$1')
-    .replace(/<br\s*\/?>/gi, '\n').replace(/#quot;/g, '"').replace(/#amp;/g, '&').replace(/<\/?[a-z][^>]*>/gi, '');
+    .replace(/<br\s*\/?>/gi, '\n').replace(/#quot;/g, '"').replace(/#amp;/g, '&').replace(/<\/?[a-z][^<>]*>/gi, '');
 }
