@@ -137,8 +137,20 @@ export function createInspector(editor, app, root, { icons, palette }) {
     ];
   };
 
+  /** Legend: just its title; the content follows the diagram. */
+  const legendView = (n) => [
+    section(null, typePicker(n)),
+    section(null, row('Title', text(() => doc.nodes.get(n.id)?.label, (v, s) => doc.transact('Rename', () => doc.update(n.id, { label: v }), { merge: s }), { placeholder: 'Legend' })),
+      h('p', { class: 'muted small', style: { marginTop: '10px' } }, 'Lists the kinds of elements, boundaries and links in use, and updates itself as the diagram changes.')),
+    section(null, h('div', { class: 'actions' },
+      action('copy', 'Duplicate', () => editor.duplicate(), 'mod+d'),
+      action('trash', 'Delete', () => editor.deleteSelection(), 'delete', 'danger'),
+    )),
+  ];
+
   const nodeView = (n) => {
     if (editor.isText(n.id)) return textView(n);
+    if (editor.schema.nodeTypes[n.type]?.shape === 'legend') return legendView(n);
     const t = resolveType(editor.schema, n);
     const get = () => doc.nodes.get(n.id);
     const ins = editor.doc.edgesOf(n.id);

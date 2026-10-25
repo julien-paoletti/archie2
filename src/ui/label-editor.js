@@ -41,6 +41,7 @@ export function createLabelEditor(editor, stage) {
       const x = align === 'center' ? o.x + o.w / 2 - w / 2 : align === 'right' ? o.x + o.w - w : o.x;
       return { rect: { x: x + TEXT_PAD, y: o.y + TEXT_PAD, w: w - TEXT_PAD * 2, h: o.h - TEXT_PAD * 2 }, align, size: st.size, weight: st.weight, lineHeight: st.lh, grow: true };
     }
+    if (type.shape === 'legend') return { rect: { x: o.x + 14, y: o.y + 11, w: o.w - 28, h: 22 }, align: 'left', size: 13, weight: 650, vcenter: true };
     if (type.shape === 'note') return { rect: { x: o.x + 13, y: o.y + 12, w: o.w - 26, h: o.h - 22 }, align: 'left', size: 13, weight: 500, vcenter: false };
     const chip = type.shape !== 'cylinder' && o.w >= 140 && o.h >= 44;
     return chip

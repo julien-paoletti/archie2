@@ -21,6 +21,7 @@ export const icons = {
   actor: 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 3.6-7 8-7s8 3 8 7',
   note: 'M5 3h10l4 4v14H5z M14 3v5h5 M8 12h8 M8 16h6',
   text: 'M5 6V4h14v2 M12 4v16 M9 20h6',
+  legend: 'M4 4h16v16H4z M7 8h2 M12 8h5 M7 12h2 M12 12h5 M7 16h2 M12 16h5',
   boundary: 'M4 8V4h4 M16 4h4v4 M20 16v4h-4 M8 20H4v-4 M11 4h2 M11 20h2 M4 11v2 M20 11v2',
   shield: 'M12 21s7-3.5 7-9.5V5.5L12 3 5 5.5v6c0 6 7 9.5 7 9.5z M9.5 12l2 2 3.5-4',
   network: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M3 12h18 M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3z',
@@ -80,6 +81,10 @@ export const architectureSchema = {
       annotation: true, noPorts: true, hint: 'Free text anywhere on the canvas',
     },
     note: { label: 'Note', w: 220, h: 110, color: '#eab308', icon: 'note', shape: 'note', shortcut: '9', dock: 'context', hint: 'Free-form annotation' },
+    legend: {
+      label: 'Legend', shape: 'legend', w: 240, h: 120, color: '#64748b', icon: 'legend', dock: 'context',
+      annotation: true, noPorts: true, hint: 'Lists the kinds of elements and links in use, kept up to date',
+    },
   },
   edgeTypes: {
     uses: { label: 'Uses', arrow: 'open' },

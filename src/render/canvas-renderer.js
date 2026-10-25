@@ -1,6 +1,7 @@
 import { boundariesCrossed, busMembers, isOverlay, resolveType, showsAsCard } from '../engine/schema.js';
 import { boundsOf, clamp, dist, inflate, intersects, lerpRect, union } from '../engine/geometry.js';
 import { SIDES, labelPoint, routeEdge, routeSimpleOrthogonal, sideNormal } from '../engine/routing.js';
+import { LEGEND, legendEntries } from '../engine/legend.js';
 import { SVGContext } from './svg-context.js';
 import { withAlpha } from './theme.js';
 
@@ -88,6 +89,7 @@ export class CanvasRenderer {
   #members = new Set();
   #memberColor = '#0284c7';
   #focus = null;
+  #legend = { version: -1, sections: [] };
 
   constructor(editor, canvas, { theme, icons = {} }) {
     this.ed = editor;
@@ -883,6 +885,7 @@ export class CanvasRenderer {
 
     this.#captions.delete(n.id);
     if (shape === 'bus') return this.#busContent(ctx, n, r, type, color, editing);
+    if (shape === 'legend') return this.#legendContent(ctx, n, r, editing);
     if (shape === 'note') {
       if (editing) return;
       ctx.font = `500 13px ${FONT}`;
@@ -974,6 +977,97 @@ export class CanvasRenderer {
       w: auto ? Math.ceil(Math.min(Math.max(longest, 24), 480) + TEXT_PAD * 2) : n.w,
       h: Math.ceil(lines.length * st.lh + TEXT_PAD * 2),
     };
+  }
+
+  /** Legend: the kinds of elements, boundaries and links the diagram uses, one row each. */
+  #legendContent(ctx, n, r, editing) {
+    const { theme: th, lod } = this;
+    const doc = this.ed.doc;
+    if (this.#legend.version !== doc.version) this.#legend = { version: doc.version, sections: legendEntries(doc) };
+    const { header, section, row } = LEGEND;
+    const x = r.x + 14, right = r.x + r.w - 14;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `650 13px ${FONT}`;
+    ctx.fillStyle = th.text;
+    if (editing !== 'label') ctx.fillText(this.#ellipsize(ctx, n.label || 'Legend', right - x), x, r.y + 22);
+    if (lod < 2) return;
+    let y = r.y + header;
+    if (!this.#legend.sections.length) {
+      ctx.font = `500 11.5px ${FONT}`;
+      ctx.fillStyle = th.muted;
+      ctx.fillText('Add elements and links to fill it', x, y + 6);
+      return;
+    }
+    for (const s of this.#legend.sections) {
+      ctx.font = `600 9.5px ${FONT}`;
+      ctx.fillStyle = th.muted;
+      ctx.fillText(s.title.toUpperCase(), x, y + section / 2 + 2);
+      y += section;
+      for (const e of s.entries) {
+        const cy = y + row / 2;
+        this.#legendSwatch(ctx, e, x, cy);
+        ctx.font = `500 12px ${FONT}`;
+        ctx.fillStyle = th.text;
+        const label = this.#ellipsize(ctx, e.label, right - x - 34);
+        ctx.fillText(label, x + 34, cy + 0.5);
+        if (e.sub) {
+          const lw = this.#measureText(ctx, label);
+          ctx.font = `500 11px ${FONT}`;
+          ctx.fillStyle = th.muted;
+          const sub = this.#ellipsize(ctx, e.sub, right - x - 34 - lw - 8);
+          if (sub) ctx.fillText(sub, x + 34 + lw + 8, cy + 0.5);
+        }
+        y += row;
+      }
+    }
+  }
+
+  /** The 24px-wide sample in front of a legend row. */
+  #legendSwatch(ctx, e, x, cy) {
+    const th = this.theme, z = this.z;
+    ctx.save();
+    if (e.kind === 'node') {
+      ctx.beginPath();
+      if (e.shape === 'actor') ctx.arc(x + 11, cy, 9, 0, Math.PI * 2);
+      else ctx.roundRect(x + 2, cy - 9, 18, 18, 5);
+      ctx.fillStyle = withAlpha(e.color ?? th.accent, th.dark ? 0.22 : 0.14);
+      ctx.fill();
+      this.#icon(ctx, e.icon, x + 5, cy - 6, 12, e.color ?? th.accent, 2.2);
+    } else if (e.kind === 'boundary') {
+      ctx.beginPath();
+      ctx.roundRect(x, cy - 7, 24, 14, 3);
+      ctx.setLineDash(e.overlay ? [5, 2, 1, 2] : [4, 2.5]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = e.color;
+      ctx.stroke();
+    } else if (e.kind === 'edge') {
+      const lw = Math.max(e.width, 1 / z);
+      ctx.beginPath();
+      ctx.moveTo(x, cy);
+      ctx.lineTo(x + (e.arrow === 'filled' ? 17 : 23), cy);
+      if (e.dash) ctx.setLineDash(e.dash.map((d) => d * 0.7));
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = th.edge;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      this.#arrow(ctx, { points: [{ x, y: cy }, { x: x + 24, y: cy }], end: { x: 1, y: 0 } }, e.arrow, th.edge, lw);
+    } else if (e.kind === 'marker') {
+      ctx.beginPath();
+      ctx.moveTo(x + 12, cy - 6);
+      ctx.lineTo(x + 18, cy);
+      ctx.lineTo(x + 12, cy + 6);
+      ctx.lineTo(x + 6, cy);
+      ctx.closePath();
+      ctx.fillStyle = e.color;
+      ctx.fill();
+    } else if (e.kind === 'status') {
+      ctx.beginPath();
+      ctx.roundRect(x, cy - 5, 24, 10, 5);
+      ctx.fillStyle = STATUS_BADGES[e.status].color;
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   /** Network bus: icon, name and CIDR on one line along the bar (rotated for a vertical bus). */

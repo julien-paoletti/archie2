@@ -4,6 +4,7 @@ import { History } from '../engine/history.js';
 import { EdgeRouter } from '../engine/router.js';
 import { layoutHierarchy } from '../engine/layout.js';
 import { dependencies, pathsBetween } from '../engine/analysis.js';
+import { legendEntries, legendHeight } from '../engine/legend.js';
 import {
   boundsOf, center, containsPoint, containsRect, dist, distToPolyline, distToSegment, inflate, overlaps, pointAlong,
   polylineLength, projectOnPolyline, rectEquals, snap, union,
@@ -133,6 +134,7 @@ export class Editor extends Emitter {
   }
 
   #onDocChange(e) {
+    this.#fitLegends();
     const gone = [...this.selection].filter((id) => !this.doc.has(id));
     if (gone.length || e.reset) {
       this.selection = new Set([...this.selection].filter((id) => this.doc.has(id)));
@@ -142,6 +144,18 @@ export class Editor extends Emitter {
     if (this.editingId && !this.doc.has(this.editingId)) this.endEdit();
     this.emit('docchange', e);
     this.invalidate();
+  }
+
+  /**
+   * A legend's height follows its content (what the diagram uses). Kept out of the history:
+   * it is derived, and undoing the change that caused it recomputes it anyway.
+   */
+  #fitLegends() {
+    const legends = [...this.doc.nodes.values()].filter((n) => this.schema.nodeTypes[n.type]?.shape === 'legend');
+    if (!legends.length) return;
+    const h = legendHeight(legendEntries(this.doc));
+    const stale = legends.filter((n) => n.h !== h);
+    if (stale.length) this.doc.transact('Legend', () => stale.forEach((n) => this.doc.update(n.id, { h })), { history: false });
   }
 
   // ───────────────────────────── selection
