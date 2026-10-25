@@ -83,6 +83,7 @@ export class CanvasRenderer {
   #tabs = new Map();
   #members = new Set();
   #memberColor = '#0284c7';
+  #focus = null;
 
   constructor(editor, canvas, { theme, icons = {} }) {
     this.ed = editor;
@@ -308,6 +309,7 @@ export class CanvasRenderer {
       else (doc.isContainer(n) && !n.collapsed && !showsAsCard(doc, n) ? containers : leaves).push([n, r]);
     }
     this.shadows = leaves.length < 400;
+    this.#focus = this.#exporting ? null : ed.dependencyFocus();
     this.#members = new Set();
     if (!this.#exporting) {
       for (const id of ed.selection) {
@@ -407,6 +409,13 @@ export class CanvasRenderer {
     }
   }
 
+  /** Opacity under the dependency focus: whatever it leaves out fades back. */
+  #fade(id, kind) {
+    if (this.#exporting) return 1;
+    const lit = !this.#focus || (kind === 'edge' ? this.#focus.edges : this.#focus.nodes).has(id);
+    return 1 - 0.82 * this.#fx.value('f' + id, lit ? 0 : 1, 14);
+  }
+
   #state(id, kind) {
     if (this.#exporting) return { hs: 0, ss: 0 };
     const ed = this.ed;
@@ -425,7 +434,7 @@ export class CanvasRenderer {
     const ds = this.#exporting ? 0 : this.#fx.value('d' + n.id, ed.overlay.dropTarget === n.id ? 1 : 0, 22);
     const ap = this.#appearT(n.id);
     ctx.save();
-    ctx.globalAlpha = easeOut(ap);
+    ctx.globalAlpha = easeOut(ap) * this.#fade(n.id, 'node');
     if (type.shape === 'boundary') {
       this.#drawBoundary(ctx, n, r, type, color, hs, ss, ds);
       ctx.restore();
@@ -563,7 +572,7 @@ export class CanvasRenderer {
     const color = n.style?.color ?? type.color ?? this.theme.accent;
     const { hs, ss } = part === 'outline' ? this.#state(n.id, 'node') : { hs: this.#peek('h' + n.id), ss: this.#peek('s' + n.id) };
     ctx.save();
-    ctx.globalAlpha = easeOut(this.#appearT(n.id));
+    ctx.globalAlpha = easeOut(this.#appearT(n.id)) * (part === 'outline' ? this.#fade(n.id, 'node') : 1 - 0.82 * this.#peek('f' + n.id));
     this.#drawBoundary(ctx, n, r, type, color, hs, ss, 0, { outline: part === 'outline', tab: part === 'tab', overlay: true });
     ctx.restore();
   }
@@ -617,7 +626,7 @@ export class CanvasRenderer {
     const lift = this.#exporting ? 0 : this.#fx.value('l' + n.id, ed.gesture?.all?.has(n.id) ? 1 : 0, 14);
     const ap = this.#appearT(n.id);
     ctx.save();
-    ctx.globalAlpha = easeOut(ap);
+    ctx.globalAlpha = easeOut(ap) * this.#fade(n.id, 'node');
     if (lod === 0) {
       ctx.fillStyle = withAlpha(color, th.dark ? 0.6 : 0.45);
       ctx.fillRect(r.x, r.y, r.w, r.h);
@@ -719,6 +728,7 @@ export class CanvasRenderer {
       ctx.scale(s, s);
       ctx.translate(-cx, -cy);
     }
+    ctx.globalAlpha *= this.#fade(n.id, 'node');
     if (shape === 'text') {
       this.#drawText(ctx, n, r, hs, ss);
       ctx.restore();
@@ -1028,7 +1038,7 @@ export class CanvasRenderer {
     const shorten = arrow === 'filled' ? 7 + lw : 0.5;
 
     ctx.save();
-    ctx.globalAlpha = easeOut(ap);
+    ctx.globalAlpha = easeOut(ap) * this.#fade(e.id, 'edge');
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     if (hi > 0.01 && lod > 0) {
@@ -1074,6 +1084,8 @@ export class CanvasRenderer {
     const th = this.theme;
     const sel = !this.#exporting && this.ed.selection.has(e.id);
     const { x, y } = count ? route.mid : labelPoint(route, e.style?.labelT);
+    ctx.save();
+    ctx.globalAlpha = 1 - 0.82 * this.#peek('f' + e.id);
     ctx.font = `500 11.5px ${FONT}`;
     const tw = text ? Math.min(this.#measureText(ctx, text), 220) : 0;
     ctx.font = `500 10px ${MONO}`;
@@ -1104,6 +1116,7 @@ export class CanvasRenderer {
         ctx.fillText(this.#ellipsize(ctx, proto, 220), x, py + 0.5);
       }
     }
+    ctx.restore();
   }
 
   #tracePath(ctx, route, shorten = 0) {

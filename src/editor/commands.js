@@ -41,7 +41,7 @@ export function createCommands(ed) {
     },
     { id: 'edit.quickAdd', title: 'Add connected node', group: 'Edit', keys: ['tab'], run: () => ed.quickAdd(ed.singleSelected()),
       enabled: () => singleNode() && !ed.schema.nodeTypes[ed.doc.nodes.get(ed.singleSelected()).type]?.noPorts },
-    { id: 'edit.escape', title: 'Deselect', group: 'Edit', keys: ['escape'], hidden: true, run: () => ed.setSelection([]) },
+    { id: 'edit.escape', title: 'Deselect', group: 'Edit', keys: ['escape'], hidden: true, run: () => ed.escape() },
 
     { id: 'arrange.layout', title: 'Auto layout', group: 'Arrange', keys: ['l'], run: () => ed.autoLayout() },
     {
@@ -88,6 +88,7 @@ export function createCommands(ed) {
     { id: 'nudge.up5', title: 'Nudge up ×5', hidden: true, keys: ['shift+arrowup'], run: nudge(0, -5) },
     { id: 'nudge.down5', title: 'Nudge down ×5', hidden: true, keys: ['shift+arrowdown'], run: nudge(0, 5) },
 
+    { id: 'view.dependencies', title: 'Show dependencies (dim the rest)', group: 'View', keys: ['d'], run: () => ed.toggleDependencies() },
     { id: 'view.fit', title: 'Zoom to fit', group: 'View', keys: ['shift+1'], run: () => ed.fitView() },
     { id: 'view.fitSelection', title: 'Zoom to selection', group: 'View', keys: ['shift+2'], run: () => ed.zoomToSelection(), enabled: hasAny },
     { id: 'view.actual', title: 'Zoom to 100%', group: 'View', keys: ['shift+0'], run: () => ed.zoomTo(1) },

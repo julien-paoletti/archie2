@@ -389,10 +389,15 @@ export function createSelectionBar(editor, app, root, { palette }) {
     const nodes = editor.selectedNodeIds();
     const edges = editor.selectedEdgeIds();
     const items = [];
+    const depsBtn = (label) => {
+      const b = btn('deps', label + '  ·  D', () => editor.toggleDependencies());
+      b.classList.toggle('on', editor.focusDeps);
+      return b;
+    };
     if (nodes.length === 1 && !edges.length) {
       const n = doc.nodes.get(nodes[0]);
       items.push(colorBtn(nodes), btn('edit', (editor.isText(n.id) ? 'Edit text' : 'Rename') + '  ·  Enter', () => editor.editLabel(n.id)));
-      if (!editor.schema.nodeTypes[n.type]?.noPorts) items.push(btn('link', 'Add connected  ·  Tab', () => editor.quickAdd(n.id)));
+      if (!editor.schema.nodeTypes[n.type]?.noPorts) items.push(btn('link', 'Add connected  ·  Tab', () => editor.quickAdd(n.id)), depsBtn('Dependencies'));
       if (doc.isContainer(n) && doc.hasChildren(n.id) && !n.collapsed) items.push(btn('layout', 'Layout contents  ·  L', () => editor.autoLayout()));
       if (editor.canFitToContent([n.id])) items.push(btn('fitContent', 'Fit to content  ·  F', () => editor.fitToContent([n.id])));
       if (doc.isContainer(n) && !editor.showsAsCard(n.id)) items.push(btn(n.collapsed ? 'expand' : 'collapse', (n.collapsed ? 'Expand' : 'Collapse') + '  ·  C', () => editor.toggleCollapse([n.id])));
@@ -411,6 +416,7 @@ export function createSelectionBar(editor, app, root, { palette }) {
         ['distV', 'Distribute vertically', () => editor.distribute('y'), 'alt+shift+v'],
       ]));
       items.push(colorBtn(nodes), alignMenu, btn('group', 'Group  ·  Ctrl+G', () => editor.group()));
+      if (nodes.length === 2) items.push(depsBtn('Paths between them'));
       const wrap = [...editor.commands.values()].find((c) => c.id.startsWith('arrange.wrap.'));
       if (wrap) items.push(btn('boundary', wrap.title + '  ·  B', () => wrap.run()));
       items.push(btn('layout', 'Auto layout', () => editor.autoLayout()));
@@ -514,6 +520,7 @@ export function createSelectionBar(editor, app, root, { palette }) {
     place();
   };
   editor.on('selectionchange', rebuild);
+  editor.on('focus', rebuild);
   editor.on('docchange', () => {
     if (editor.selection.size && !editor.gesture) rebuild();
   });

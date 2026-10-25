@@ -68,9 +68,11 @@ export function createTopBar(editor, app, root) {
   });
   const snapGrid = iconButton('grid', tip('Snap to grid', 'settings.snapGrid', editor), () => editor.toggleSetting('snapToGrid'));
   const guides = iconButton('guides', tip('Smart guides', 'settings.snapObjects', editor), () => editor.toggleSetting('snapToObjects'));
+  const deps = iconButton('deps', tip('Show dependencies', 'view.dependencies', editor), () => editor.toggleDependencies());
 
   const tools = h('div', { class: 'panel toolbar' },
-    select, hand, h('i', { class: 'sep' }), undo, redo, h('i', { class: 'sep' }), layout, dir, h('i', { class: 'sep' }), snapGrid, guides);
+    select, hand, h('i', { class: 'sep' }), undo, redo, h('i', { class: 'sep' }), layout, dir, h('i', { class: 'sep' }), snapGrid, guides,
+    h('i', { class: 'sep' }), deps);
 
   const search = h('button', { class: 'btn btn-search', type: 'button', 'data-tip': 'Commands & search', onclick: () => app.openPalette() },
     svg(ui.search, { size: 16 }), h('span', {}, 'Search'), kbd('mod+k'));
@@ -88,13 +90,14 @@ export function createTopBar(editor, app, root) {
     hand.classList.toggle('on', editor.tool === 'hand');
     snapGrid.classList.toggle('on', editor.settings.snapToGrid);
     guides.classList.toggle('on', editor.settings.snapToObjects);
+    deps.classList.toggle('on', editor.focusDeps);
     const lr = editor.settings.layoutDirection === 'LR';
     dir.replaceChildren(svg(lr ? ui.dirLR : ui.dirTB));
     dir.dataset.tip = tip(lr ? 'Direction: left → right' : 'Direction: top → bottom', 'arrange.layoutFlip', editor);
     theme.replaceChildren(svg(app.theme === 'dark' ? ui.sun : ui.moon));
     inspector.classList.toggle('on', app.inspectorOpen);
   };
-  for (const ev of ['history', 'tool', 'settings']) editor.on(ev, sync);
+  for (const ev of ['history', 'tool', 'settings', 'focus']) editor.on(ev, sync);
   app.on('change', sync);
   sync();
 }
@@ -284,6 +287,19 @@ export function createHints(editor, root) {
     } else if (editor.gesture instanceof ConnectGesture) {
       key = 'connect';
       parts = [t('Release on a node to link'), dot(), t('on empty space to create one')];
+    } else if (editor.focusDeps) {
+      const f = editor.dependencyFocus();
+      const exit = [dot(), k('d'), t('or'), k('escape'), t('exit')];
+      if (!f) {
+        key = 'deps';
+        parts = [t('Select an element to see what it depends on and what depends on it'), dot(), t('two to see the paths between them'), ...exit];
+      } else if (f.up) {
+        key = `deps:${f.down.size}:${f.up.size}`;
+        parts = [t(`Depends on ${f.down.size}`), dot(), t(`${f.up.size} depend on it`), ...exit];
+      } else {
+        key = `deps:path:${f.found}`;
+        parts = [t(f.found ? 'Paths between the two highlighted' : 'No path between these two'), ...exit];
+      }
     } else if (!editor.doc.nodes.size) {
       key = 'empty';
       parts = [t('Double-click to add a component'), dot(), t('drag shapes from the left'), dot(), k('?'), t('shortcuts')];
@@ -310,7 +326,7 @@ export function createHints(editor, root) {
     el.replaceChildren(...parts);
     el.classList.add('in');
   };
-  for (const ev of ['selectionchange', 'gesture', 'docchange']) editor.on(ev, update);
+  for (const ev of ['selectionchange', 'gesture', 'docchange', 'focus']) editor.on(ev, update);
   update();
 }
 

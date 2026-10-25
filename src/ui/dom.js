@@ -77,6 +77,7 @@ export const ui = {
   collapse: 'M4 14h6v6 M20 10h-6V4 M14 10l7-7 M3 21l7-7',
   expand: 'M15 3h6v6 M9 21H3v-6 M21 3l-7 7 M3 21l7-7',
   keyboard: 'M2 6h20v12H2z M6 10h.01 M10 10h.01 M14 10h.01 M18 10h.01 M7 14h10',
+  deps: 'M7 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M21 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M21 19a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M7 11l10-5 M7 13l10 5',
 };
 
 export const isMac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');

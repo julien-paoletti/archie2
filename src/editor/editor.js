@@ -3,6 +3,7 @@ import { DiagramDocument, uid } from '../engine/document.js';
 import { History } from '../engine/history.js';
 import { EdgeRouter } from '../engine/router.js';
 import { layoutHierarchy } from '../engine/layout.js';
+import { dependencies, pathsBetween } from '../engine/analysis.js';
 import {
   boundsOf, center, containsPoint, containsRect, dist, distToPolyline, distToSegment, inflate, overlaps, pointAlong,
   polylineLength, projectOnPolyline, rectEquals, snap, union,
@@ -49,9 +50,12 @@ export class Editor extends Emitter {
   keys = { space: false };
   pointer = { x: 0, y: 0, world: { x: 0, y: 0 }, inside: false };
   overlay = { guides: [], gaps: [], sideMarks: [], marquee: null, connect: null, dropTarget: null, insertEdge: null };
+  /** Dependency focus: dim everything not upstream or downstream of the selection. */
+  focusDeps = false;
 
   #pasteCount = 0;
   #copyPoint = null;
+  #focusCache = { key: null, value: null };
 
   constructor({ schema, settings = {} }) {
     super();
@@ -182,6 +186,43 @@ export class Editor extends Emitter {
       if (tag) rects.push(tag);
     }
     return boundsOf(rects);
+  }
+
+  // ───────────────────────────── dependency focus
+
+  /** Esc steps back one level: deselect, then leave the dependency focus. */
+  escape() {
+    if (this.selection.size) this.setSelection([]);
+    else if (this.focusDeps) this.toggleDependencies(false);
+  }
+
+  toggleDependencies(on = !this.focusDeps) {
+    this.focusDeps = on;
+    this.emit('focus', on);
+    this.invalidate();
+  }
+
+  /**
+   * What the dependency focus keeps lit, or null when it is off or there is nothing to focus
+   * on. One selected node: everything it depends on and everything depending on it. Two:
+   * the paths between them. Lit nodes include their containers, so the context stays readable.
+   * Returns { nodes, edges, up?, down?, found? }; cached per document version and selection.
+   */
+  dependencyFocus() {
+    if (!this.focusDeps) return null;
+    const ids = this.selectedNodeIds();
+    const key = this.doc.version + '|' + ids.join(',');
+    if (this.#focusCache.key === key) return this.#focusCache.value;
+    let value = null;
+    if (ids.length === 1) value = dependencies(this.doc, ids[0]);
+    else if (ids.length === 2) value = pathsBetween(this.doc, ids[0], ids[1]);
+    if (value) {
+      const nodes = new Set(value.nodes);
+      for (const id of value.nodes) for (const a of this.doc.ancestors(id)) nodes.add(a);
+      value = { ...value, nodes };
+    }
+    this.#focusCache = { key, value };
+    return value;
   }
 
   // ───────────────────────────── hit testing
