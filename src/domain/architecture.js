@@ -135,5 +135,21 @@ export function sampleDiagram() {
   e('orders', 'bus', 'async', 'OrderPlaced');
   e('bus', 'notify', 'async');
   e('notify', 'email', 'uses', 'SMTP');
-  return { nodes, edges };
+
+  const step = (s, t, label, reverse = false) => ({ edge: `e_${s}_${t}`, label, ...(reverse ? { reverse } : {}) });
+  const flows = [{
+    id: 'checkout', name: 'Checkout',
+    steps: [
+      step('customer', 'web', 'Places the order'),
+      step('web', 'gateway', 'POST /orders'),
+      step('gateway', 'orders', 'Create order'),
+      step('orders', 'ordersdb', 'Save as pending'),
+      step('orders', 'payments', 'Charge the card'),
+      step('payments', 'stripe', 'Create payment intent'),
+      step('payments', 'stripe', 'Payment confirmed', true),
+      step('orders', 'bus', 'Publish OrderPlaced'),
+      step('bus', 'notify', 'Send the receipt'),
+    ],
+  }];
+  return { nodes, edges, flows };
 }

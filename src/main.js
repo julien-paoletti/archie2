@@ -7,7 +7,8 @@ import { architectureSchema, icons, palette, sampleDiagram } from './domain/arch
 import { bindInput } from './ui/input.js';
 import { createGrid } from './ui/grid.js';
 import { createLabelEditor } from './ui/label-editor.js';
-import { createDock, createHints, createMinimap, createPresentBar, createToaster, createTopBar, createViewControls } from './ui/chrome.js';
+import { createDock, createFlowPlayer, createHints, createMinimap, createPresentBar, createToaster, createTopBar, createViewControls } from './ui/chrome.js';
+import { flowToMermaidSequence } from './domain/formats/sequence.js';
 import { createInspector, createSelectionBar } from './ui/inspector.js';
 import { createHoverCard } from './ui/hovercard.js';
 import { createChecks } from './ui/checks.js';
@@ -302,6 +303,16 @@ class App extends Emitter {
 
   openImport() { importDialog.open(); }
 
+  /** A flow as a Mermaid sequence diagram, on the clipboard. */
+  async copyFlowSequence(id) {
+    try {
+      await navigator.clipboard.writeText(flowToMermaidSequence(editor.doc, id));
+      toast('Sequence diagram copied (Mermaid)', { icon: 'copy' });
+    } catch (err) {
+      toast(`Could not copy: ${err.message}`, { icon: 'x', timeout: 5000 });
+    }
+  }
+
   /** Present: the diagram alone, read-only, framed. A view-only link can't leave it (Edit a copy instead). */
   present(on = !this.presenting) {
     if (on === this.presenting || (!on && this.viewOnly)) return;
@@ -371,6 +382,7 @@ createGrid(editor, stage);
 createLabelEditor(editor, stage);
 createTopBar(editor, app, root, { extras: [createChecks(editor)] });
 createPresentBar(editor, app, root);
+createFlowPlayer(editor, root);
 createDock(editor, app, root, icons);
 createMinimap(editor, createViewControls(editor, app, root), app);
 createHints(editor, root);

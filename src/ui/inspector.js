@@ -1,6 +1,6 @@
 import { overlaps, polylineCrossesRect } from '../engine/geometry.js';
 import { boundariesCrossed, busMembers, isOverlay, resolveType } from '../engine/schema.js';
-import { h, kbd, svg, ui } from './dom.js';
+import { h, isEditable, kbd, svg, ui } from './dom.js';
 import { popover } from './chrome.js';
 import { linkName, safeUrl, splitLinks } from './links.js';
 
@@ -316,6 +316,49 @@ export function createInspector(editor, app, root, { icons, palette }) {
     ];
   };
 
+  /** The flows of the diagram: play one, open it to edit, or start a new one. */
+  const flowsSection = () => section('Flows',
+    h('div', { class: 'conns' }, ...[...doc.flows.values()].map((f) => h('div', { class: 'flow-row' },
+      h('button', { type: 'button', class: 'btn', 'data-tip': 'Play', 'aria-label': `Play ${f.name}`, disabled: !f.steps.length, onclick: () => editor.playFlow(f.id) }, svg(ui.play, { size: 14 })),
+      h('button', { type: 'button', class: 'conn', onclick: () => editor.showFlow(f.id) },
+        h('span', {}, f.name || 'Untitled flow'), h('em', {}, `${f.steps.length} step${f.steps.length === 1 ? '' : 's'}`))))),
+    h('div', { class: 'actions' }, action('plus', 'New flow', () => editor.createFlow())),
+    doc.flows.size ? null : h('p', { class: 'muted small' }, 'A flow numbers the links a request goes through, then plays it step by step.'));
+
+  /** One flow: its name, how to add steps, and the steps (label, direction, order). */
+  const flowView = (f) => {
+    const name = (id) => doc.nodes.get(id)?.label || '—';
+    const live = () => doc.flows.get(f.id);
+    const rec = editor.flow.recording;
+    const steps = f.steps.map((s, i) => {
+      const e = doc.edges.get(s.edge);
+      const [from, to] = s.reverse ? [e.target, e.source] : [e.source, e.target];
+      const small = (icon, tipText, run, on) => h('button', { type: 'button', class: 'btn sm' + (on ? ' on' : ''), 'data-tip': tipText, 'aria-label': tipText, onclick: run }, svg(ui[icon], { size: 13 }));
+      return h('div', { class: 'step' },
+        h('div', { class: 'step-head' },
+          h('span', { class: 'step-num' }, String(i + 1)),
+          h('span', { class: 'step-ends' }, `${name(from)} ${s.reverse ? '⇠' : '→'} ${name(to)}`),
+          small('swap', s.reverse ? 'Response (back along the link)' : 'Request (along the link)', () => editor.updateFlowStep(f.id, i, { reverse: !s.reverse }), s.reverse),
+          small('up', 'Move up', () => editor.moveFlowStep(f.id, i, -1)),
+          small('down', 'Move down', () => editor.moveFlowStep(f.id, i, 1)),
+          small('x', 'Remove step', () => editor.removeFlowStep(f.id, i))),
+        text(() => live()?.steps[i]?.label, (v, sess) => editor.updateFlowStep(f.id, i, { label: v }, sess), { placeholder: e.label || 'What happens' }));
+    });
+    return [
+      section(null, h('button', { type: 'button', class: 'back', onclick: () => editor.showFlow(null) }, svg(ui.back, { size: 14 }), 'All flows'),
+        row('Flow', text(() => live()?.name, (v, s) => editor.renameFlow(f.id, v, s), { placeholder: 'e.g. Checkout' }))),
+      section(`Steps · ${f.steps.length}`,
+        h('button', { type: 'button', class: 'record' + (rec ? ' on' : ''), onclick: () => editor.showFlow(f.id, { record: !rec }) },
+          h('i', {}), rec ? 'Recording: click links in order' : 'Click to record steps'),
+        ...steps,
+        !f.steps.length && h('p', { class: 'muted small' }, 'Click the links a request goes through, in order. A step back along a link (a response) uses the ⇄ button.')),
+      section(null, h('div', { class: 'actions' },
+        f.steps.length > 0 && action('play', 'Play', () => editor.playFlow(f.id)),
+        f.steps.length > 0 && action('code', 'Copy as sequence diagram', () => app.copyFlowSequence(f.id)),
+        action('trash', 'Delete flow', () => editor.deleteFlow(f.id), null, 'danger'))),
+    ];
+  };
+
   const docView = () => {
     const stat = (n, label) => h('div', { class: 'stat' }, h('strong', {}, String(n)), h('span', {}, label));
     const toggle = (label, key) => {
@@ -332,6 +375,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
     refreshers.push(updateCounts);
     return [
       section('Diagram', counts),
+      flowsSection(),
       section('Canvas',
         toggle('Snap to grid', 'snapToGrid'),
         toggle('Smart guides', 'snapToObjects'),
@@ -350,9 +394,11 @@ export function createInspector(editor, app, root, { icons, palette }) {
     const nodes = editor.selectedNodeIds();
     const edges = editor.selectedEdgeIds();
     let content;
+    const flow = editor.flow.id && doc.flows.get(editor.flow.id);
     if (nodes.length === 1 && !edges.length) content = nodeView(doc.nodes.get(nodes[0]));
     else if (edges.length === 1 && !nodes.length) content = edgeView(doc.edges.get(edges[0]));
     else if (nodes.length || edges.length) content = multiView(nodes, edges);
+    else if (flow) content = flowView(flow);
     else content = docView();
     panel.replaceChildren(...content.filter(Boolean));
   };
@@ -367,17 +413,20 @@ export function createInspector(editor, app, root, { icons, palette }) {
     });
   };
 
+  // Never rebuild under the user's fingers: a text field being typed in keeps its panel.
+  const typing = () => panel.contains(document.activeElement) && isEditable(document.activeElement);
   editor.on('selectionchange', render);
+  editor.on('flow', () => { if (!typing()) render(); });
   editor.on('docchange', (e) => {
     // Structural changes (type, connections) need a rebuild; edits just refresh values.
     const manualFlip = (op) => {
       const a = op.before.style, b = op.after.style;
       return !!a?.points !== !!b?.points || (a?.labelT == null) !== (b?.labelT == null);
     };
-    const rebuild = e.reset || e.patch.ops.some((op) => op.t !== 'set' || 'type' in op.after || 'source' in op.after ||
+    const rebuild = e.reset || e.patch.ops.some((op) => op.t !== 'set' || op.k === 'flow' || 'type' in op.after || 'source' in op.after ||
       'target' in op.after || 'collapsed' in op.after || ('style' in op.after && manualFlip(op)) ||
       ('data' in op.after && !!op.before.data?.borderOnly !== !!op.after.data?.borderOnly));
-    if (rebuild && !panel.contains(document.activeElement)) render();
+    if (rebuild && !typing()) render();
     else refresh();
   });
   editor.on('settings', refresh);

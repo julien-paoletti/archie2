@@ -4,7 +4,8 @@ import { boundsOf } from './geometry.js';
 
 /**
  * The diagram document: a tree of nodes (containers nest children through `parent`)
- * plus a set of edges. It is schema-driven and knows nothing about rendering or any domain.
+ * plus a set of edges, and flows (named, ordered walks over edges: request scenarios).
+ * It is schema-driven and knows nothing about rendering or any domain.
  *
  * Every mutation happens inside a transaction and is recorded as an invertible op:
  *   { t: 'add' | 'del', k: 'node' | 'edge', id, v }          // v = full snapshot
@@ -72,6 +73,8 @@ export function compressOps(list) {
 export class DiagramDocument extends Emitter {
   nodes = new Map();
   edges = new Map();
+  /** id → { id, name, steps: [{ edge, label, reverse }] } */
+  flows = new Map();
   index = new SpatialHash(256);
   version = 0;
 
@@ -92,9 +95,9 @@ export class DiagramDocument extends Emitter {
 
   getNode(id) { return this.nodes.get(id); }
   getEdge(id) { return this.edges.get(id); }
-  get(id) { return this.nodes.get(id) ?? this.edges.get(id); }
-  has(id) { return this.nodes.has(id) || this.edges.has(id); }
-  kindOf(id) { return this.nodes.has(id) ? 'node' : this.edges.has(id) ? 'edge' : null; }
+  get(id) { return this.nodes.get(id) ?? this.edges.get(id) ?? this.flows.get(id); }
+  has(id) { return this.nodes.has(id) || this.edges.has(id) || this.flows.has(id); }
+  kindOf(id) { return this.nodes.has(id) ? 'node' : this.edges.has(id) ? 'edge' : this.flows.has(id) ? 'flow' : null; }
 
   /** Container types hold children, unless the node is set to `data.borderOnly` (an outline only). */
   isContainer(node) {
@@ -279,7 +282,17 @@ export class DiagramDocument extends Emitter {
     return edge;
   }
 
-  /** Shallow-assign `values` to a node or edge. Returns true if anything changed. */
+  addFlow(data = {}) {
+    const flow = this.#normalizeFlow(data);
+    if (this.has(flow.id)) throw new Error(`Duplicate id ${flow.id}`);
+    this.#run('Add flow', () => {
+      this.#insert('flow', flow);
+      this.#rec({ t: 'add', k: 'flow', id: flow.id, v: structuredClone(flow) });
+    });
+    return flow;
+  }
+
+  /** Shallow-assign `values` to a node, edge or flow. Returns true if anything changed. */
   update(id, values) {
     const kind = this.kindOf(id);
     if (!kind) return false;
@@ -305,22 +318,35 @@ export class DiagramDocument extends Emitter {
     return true;
   }
 
-  /** Remove nodes (with their descendants) and edges, plus every edge left dangling. */
+  /**
+   * Remove nodes (with their descendants), edges and flows, plus every edge left dangling.
+   * Flow steps over removed edges go too.
+   */
   remove(ids) {
     const nodeIds = new Set();
     const edgeIds = new Set();
+    const flowIds = new Set();
     for (const id of ids) {
       if (this.nodes.has(id)) {
         nodeIds.add(id);
         for (const d of this.descendants(id)) nodeIds.add(d);
       } else if (this.edges.has(id)) {
         edgeIds.add(id);
+      } else if (this.flows.has(id)) {
+        flowIds.add(id);
       }
     }
     for (const n of nodeIds) for (const e of this.#adjacency.get(n) ?? []) edgeIds.add(e);
-    if (!nodeIds.size && !edgeIds.size) return;
+    if (!nodeIds.size && !edgeIds.size && !flowIds.size) return;
     const depth = new Map([...nodeIds].map((id) => [id, this.depth(id)]));
     this.#run('Delete', () => {
+      for (const id of flowIds) {
+        this.#rec({ t: 'del', k: 'flow', id, v: structuredClone(this.flows.get(id)) });
+        this.#delete('flow', id);
+      }
+      for (const f of this.flows.values()) {
+        if (f.steps.some((s) => edgeIds.has(s.edge))) this.update(f.id, { steps: f.steps.filter((s) => !edgeIds.has(s.edge)) });
+      }
       for (const id of edgeIds) {
         this.#rec({ t: 'del', k: 'edge', id, v: structuredClone(this.edges.get(id)) });
         this.#delete('edge', id);
@@ -383,6 +409,7 @@ export class DiagramDocument extends Emitter {
       version: 1,
       nodes: this.order().map((id) => structuredClone(this.nodes.get(id))),
       edges: [...this.edges.values()].map((e) => structuredClone(e)),
+      ...(this.flows.size ? { flows: [...this.flows.values()].map((f) => structuredClone(f)) } : {}),
     };
   }
 
@@ -393,6 +420,11 @@ export class DiagramDocument extends Emitter {
     for (const raw of json.edges ?? []) {
       const e = this.#normalizeEdge(raw);
       if (this.nodes.has(e.source) && this.nodes.has(e.target)) this.#insert('edge', e);
+    }
+    for (const raw of json.flows ?? []) {
+      const f = this.#normalizeFlow(raw);
+      f.steps = f.steps.filter((s) => this.edges.has(s.edge));
+      if (!this.has(f.id)) this.#insert('flow', f);
     }
     this.version++;
     this.emit('change', { patch: { label: 'Load', ops: [], merge: null, animate: false }, source: 'load', reset: true });
@@ -437,6 +469,14 @@ export class DiagramDocument extends Emitter {
     };
   }
 
+  #normalizeFlow(d) {
+    return {
+      id: d.id ?? uid('f'),
+      name: d.name ?? '',
+      steps: (d.steps ?? []).map((s) => ({ edge: s.edge, label: s.label ?? '', ...(s.reverse ? { reverse: true } : {}) })),
+    };
+  }
+
   #link(map, key, id) {
     let set = map.get(key);
     if (!set) map.set(key, (set = new Set()));
@@ -451,7 +491,9 @@ export class DiagramDocument extends Emitter {
   }
 
   #insert(kind, obj) {
-    if (kind === 'node') {
+    if (kind === 'flow') {
+      this.flows.set(obj.id, obj);
+    } else if (kind === 'node') {
       this.nodes.set(obj.id, obj);
       this.#link(this.#children, obj.parent ?? null, obj.id);
       this.index.set(obj.id, obj);
@@ -465,7 +507,9 @@ export class DiagramDocument extends Emitter {
   }
 
   #delete(kind, id) {
-    if (kind === 'node') {
+    if (kind === 'flow') {
+      this.flows.delete(id);
+    } else if (kind === 'node') {
       const n = this.nodes.get(id);
       if (!n) return;
       this.nodes.delete(id);
@@ -482,9 +526,11 @@ export class DiagramDocument extends Emitter {
   }
 
   #assign(kind, id, values) {
-    const obj = kind === 'node' ? this.nodes.get(id) : this.edges.get(id);
+    const obj = kind === 'node' ? this.nodes.get(id) : kind === 'flow' ? this.flows.get(id) : this.edges.get(id);
     if (!obj) return;
-    if (kind === 'node') {
+    if (kind === 'flow') {
+      Object.assign(obj, values);
+    } else if (kind === 'node') {
       if ('parent' in values && values.parent !== obj.parent) {
         this.#unlink(this.#children, obj.parent ?? null, id);
         this.#link(this.#children, values.parent ?? null, id);
@@ -516,6 +562,7 @@ export class DiagramDocument extends Emitter {
   #clearRaw() {
     this.nodes.clear();
     this.edges.clear();
+    this.flows.clear();
     this.index.clear();
     this.#children.clear();
     this.#adjacency.clear();

@@ -95,6 +95,7 @@ button { font: inherit; color: inherit; }
 .btn:active:not(:disabled) { background: var(--press); transform: scale(0.94); }
 .btn.on { color: var(--accent); background: var(--accent-soft); }
 .btn:disabled { opacity: 0.35; cursor: default; }
+.btn[hidden] { display: none; }
 .btn:focus-visible, .menu-item:focus-visible, .dock-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .btn-label { padding: 0 12px 0 10px; color: var(--text); font-weight: 550; }
 .btn-label .ico { color: var(--accent); }
@@ -312,6 +313,24 @@ kbd {
 }
 .link-chip:hover { background: var(--accent); color: #fff; }
 .link-chip.bad { background: var(--field); color: var(--subtle); text-decoration: line-through; }
+.flow-row { display: flex; align-items: center; gap: 2px; }
+.flow-row .btn { min-width: 28px; height: 28px; padding: 0; color: var(--accent); }
+.flow-row .conn { flex: 1; min-width: 0; }
+.back { display: inline-flex; align-items: center; gap: 6px; margin: -2px 0 10px -4px; padding: 4px 6px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 550; cursor: pointer; }
+.back:hover { background: var(--hover); color: var(--text); }
+.record {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 8px; padding: 7px 10px;
+  border: 1px dashed var(--border-strong); border-radius: 9px; background: transparent; color: var(--muted); font-weight: 550; cursor: pointer;
+}
+.record i { width: 9px; height: 9px; border-radius: 50%; background: var(--subtle); }
+.record.on { border-style: solid; border-color: #e11d48; color: var(--text); background: rgba(225, 29, 72, 0.06); }
+.record.on i { background: #e11d48; animation: rec 1.2s ease-in-out infinite; }
+@keyframes rec { 50% { opacity: 0.25; } }
+.step { padding: 8px 0; border-top: 1px solid var(--border); }
+.step-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.step-num { display: grid; place-items: center; flex: none; min-width: 20px; height: 20px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; }
+.step-ends { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; font-size: 12px; }
+.btn.sm { min-width: 24px; height: 24px; padding: 0; border-radius: 7px; }
 .edge-ends { display: flex; align-items: center; gap: 6px; }
 .edge-ends .ico { color: var(--subtle); flex: none; }
 .end {
@@ -358,6 +377,19 @@ kbd {
   opacity: 0; transform: translateY(-4px) scale(0.97); transition: opacity 0.14s var(--ease), transform 0.18s var(--ease);
 }
 .swatch-pop.open { opacity: 1; transform: none; }
+
+/* ───────────────────────────── flow player */
+.flow-player {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  display: none; max-width: calc(100vw - 340px); padding: 0 6px 0 12px; gap: 4px;
+}
+.playing .flow-player { display: flex; animation: fade-up 0.25s var(--ease) both; }
+.playing .hints { display: none; }
+.flow-player > .ico { color: var(--accent); flex: none; }
+.fp-name { padding: 0 4px; white-space: nowrap; }
+.fp-count { min-width: 44px; text-align: center; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted); }
+.fp-label { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-player [data-tip]::after { top: auto; bottom: calc(100% + 8px); }
 
 /* ───────────────────────────── presenting */
 .present-bar {

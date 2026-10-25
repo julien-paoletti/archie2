@@ -60,6 +60,11 @@ export class Editor extends Emitter {
    * dependency focus work; anything that would change the diagram does not.
    */
   readOnly = false;
+  /**
+   * The flow on show: its steps are numbered on the canvas. `step` ≥ 0 while playing (that
+   * step highlighted, the rest of the diagram dimmed); `recording`: clicking links adds steps.
+   */
+  flow = { id: null, step: -1, recording: false };
 
   #pasteCount = 0;
   #copyPoint = null;
@@ -162,6 +167,12 @@ export class Editor extends Emitter {
     }
     if (this.portNode && !this.doc.nodes.has(this.portNode)) this.portNode = null;
     if (this.editingId && !this.doc.has(this.editingId)) this.endEdit();
+    // The flow on show may have gone (undo) or lost steps.
+    if (this.flow.id) {
+      const f = this.doc.flows.get(this.flow.id);
+      if (!f) this.showFlow(null);
+      else if (this.flow.step >= f.steps.length) this.showFlow(f.id, { step: f.steps.length - 1, record: this.flow.recording });
+    }
     this.emit('docchange', e);
     this.invalidate();
   }
@@ -226,11 +237,130 @@ export class Editor extends Emitter {
 
   // ───────────────────────────── dependency focus
 
-  /** Esc steps back one level: deselect, then leave the dependency focus, then tell the app (`escape`). */
+  /** Esc steps back one level: deselect, stop recording or playing a flow, leave the dependency focus, then tell the app (`escape`). */
   escape() {
     if (this.selection.size) this.setSelection([]);
+    else if (this.flow.recording) this.showFlow(this.flow.id);
+    else if (this.flow.step >= 0) this.showFlow(this.flow.id);
     else if (this.focusDeps) this.toggleDependencies(false);
     else this.emit('escape');
+  }
+
+  // ───────────────────────────── flows
+
+  /** Show a flow (null: none). `step` ≥ 0 plays it from that step; `record` adds clicked links. */
+  showFlow(id, { step = -1, record = false } = {}) {
+    const f = id && this.doc.flows.get(id);
+    this.flow = f
+      ? { id, step: f.steps.length ? Math.min(step, f.steps.length - 1) : -1, recording: record && !this.readOnly }
+      : { id: null, step: -1, recording: false };
+    this.emit('flow', this.flow);
+    this.invalidate();
+  }
+
+  playFlow(id = this.flow.id, from = 0) {
+    this.showFlow(id, { step: from });
+    const f = this.doc.flows.get(id);
+    if (f?.steps.length) this.#frameStep();
+  }
+
+  /** Move through the flow being played; the view follows the step. */
+  stepFlow(delta) {
+    const f = this.doc.flows.get(this.flow.id);
+    if (!f || this.flow.step < 0) return;
+    const step = Math.max(0, Math.min(f.steps.length - 1, this.flow.step + delta));
+    if (step === this.flow.step) return;
+    this.flow = { ...this.flow, step };
+    this.emit('flow', this.flow);
+    this.#frameStep();
+    this.invalidate();
+  }
+
+  /** Keep the current step's two ends in view. */
+  #frameStep() {
+    const s = this.currentStep();
+    if (!s) return;
+    const e = this.doc.edges.get(s.edge);
+    const ends = [e.source, e.target].map((id) => this.doc.nodes.get(this.doc.visibleAncestor(id)));
+    this.ensureVisible(boundsOf(ends));
+  }
+
+  /** The step being played: { edge, label, reverse, index }, or null. */
+  currentStep() {
+    const f = this.doc.flows.get(this.flow.id);
+    const s = f?.steps[this.flow.step];
+    return s ? { ...s, index: this.flow.step } : null;
+  }
+
+  createFlow(name) {
+    let flow;
+    this.doc.transact('New flow', () => (flow = this.doc.addFlow({ name: name ?? `Flow ${this.doc.flows.size + 1}` })));
+    this.showFlow(flow.id, { record: true });
+    return flow;
+  }
+
+  addFlowStep(edgeId, flowId = this.flow.id) {
+    const f = this.doc.flows.get(flowId);
+    if (!f || !this.doc.edges.has(edgeId)) return;
+    this.doc.transact('Add step', () => this.doc.update(flowId, { steps: [...f.steps, { edge: edgeId, label: '' }] }));
+  }
+
+  /** Change a step: { label?, reverse? }; `merge` coalesces a typing session. */
+  updateFlowStep(flowId, index, patch, merge) {
+    const f = this.doc.flows.get(flowId);
+    if (!f?.steps[index]) return;
+    const steps = f.steps.map((s, i) => {
+      if (i !== index) return s;
+      const next = { ...s, ...patch };
+      if (!next.reverse) delete next.reverse;
+      return next;
+    });
+    this.doc.transact('Edit step', () => this.doc.update(flowId, { steps }), { merge });
+  }
+
+  removeFlowStep(flowId, index) {
+    const f = this.doc.flows.get(flowId);
+    if (!f?.steps[index]) return;
+    this.doc.transact('Remove step', () => this.doc.update(flowId, { steps: f.steps.filter((_, i) => i !== index) }));
+  }
+
+  moveFlowStep(flowId, index, delta) {
+    const f = this.doc.flows.get(flowId);
+    const to = index + delta;
+    if (!f?.steps[index] || to < 0 || to >= f.steps.length) return;
+    const steps = [...f.steps];
+    [steps[index], steps[to]] = [steps[to], steps[index]];
+    this.doc.transact('Reorder steps', () => this.doc.update(flowId, { steps }));
+  }
+
+  renameFlow(flowId, name, merge) {
+    if (this.doc.flows.has(flowId)) this.doc.transact('Rename flow', () => this.doc.update(flowId, { name }), { merge });
+  }
+
+  deleteFlow(flowId) {
+    if (this.flow.id === flowId) this.showFlow(null);
+    this.doc.transact('Delete flow', () => this.doc.remove([flowId]));
+  }
+
+  /**
+   * While a flow plays: its links and their ends stay lit (the rest dims), like the
+   * dependency focus. Returns { nodes, edges } or null.
+   */
+  flowFocus() {
+    const f = this.flow.step >= 0 && this.doc.flows.get(this.flow.id);
+    if (!f) return null;
+    const key = this.doc.version + '|flow|' + f.id;
+    if (this.#focusCache.key === key) return this.#focusCache.value;
+    const nodes = new Set(), edges = new Set();
+    for (const s of f.steps) {
+      const e = this.doc.edges.get(s.edge);
+      if (!e) continue;
+      edges.add(e.id);
+      for (const id of [e.source, e.target]) for (const n of [id, ...this.doc.ancestors(id)]) nodes.add(n);
+    }
+    const value = { nodes, edges };
+    this.#focusCache = { key, value };
+    return value;
   }
 
   toggleDependencies(on = !this.focusDeps) {
@@ -510,7 +640,9 @@ export class Editor extends Emitter {
     const hit = this.hitTest(e);
     this.press = { e, hit, world: this.toWorld(e), wasSelected: !!hit && this.selection.has(hit.id) };
     if (hit && (hit.kind === 'node' || hit.kind === 'edge')) {
-      if (e.shift) {
+      if (this.flow.recording && hit.kind === 'edge') {
+        // Recording a flow: the click adds a step (on release) rather than selecting.
+      } else if (e.shift) {
         if (!this.selection.has(hit.id)) this.setSelection([...this.selection, hit.id]);
       } else if (!this.selection.has(hit.id)) {
         this.setSelection([hit.id]);
@@ -556,6 +688,10 @@ export class Editor extends Emitter {
     this.press = null;
     const hit = pr?.hit;
     if (!hit) return;
+    if (this.flow.recording && hit.kind === 'edge') {
+      this.addFlowStep(hit.id);
+      return;
+    }
     if (this.readOnly && hit.kind === 'port') return;
     if (hit.kind === 'port') {
       this.quickAdd(hit.id, hit.side);
@@ -639,6 +775,11 @@ export class Editor extends Emitter {
       if (e.key === 'Escape') this.cancelGesture();
       else this.gesture.keys?.(e);
       return true;
+    }
+    // Playing a flow: arrows (and a presenter's page keys) step through it.
+    if (this.flow.step >= 0 && !e.mod && !e.alt && !e.shift) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown') { this.stepFlow(1); return true; }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') { this.stepFlow(-1); return true; }
     }
     const combo = comboOf(e);
     const cmd = this.keymap.get(combo);

@@ -66,9 +66,20 @@ export function sanitizeDiagram(json, schema) {
       source: raw.source, target: raw.target, label: str(raw.label), data: clean(raw.data), style: clean(raw.style),
     });
   }
+  // Flows: steps over existing links only.
+  const flows = [];
+  for (const raw of Array.isArray(json.flows) ? json.flows.slice(0, 500) : []) {
+    if (!raw || typeof raw !== 'object') continue;
+    const id = str(raw.id, LIMITS.id);
+    if (!id || ids.has(id) || edgeIds.has(id) || flows.some((f) => f.id === id)) continue;
+    const steps = (Array.isArray(raw.steps) ? raw.steps.slice(0, 1000) : [])
+      .filter((s) => s && edgeIds.has(s.edge))
+      .map((s) => ({ edge: s.edge, label: str(s.label, 500), ...(s.reverse ? { reverse: true } : {}) }));
+    flows.push({ id, name: str(raw.name, 300), steps });
+  }
   const c = json.camera;
   const camera = c && [c.x, c.y, c.zoom].every(Number.isFinite) ? { x: num(c.x, 0), y: num(c.y, 0), zoom: num(c.zoom, 1, 0.02, 8) } : null;
-  return { title: json.title == null ? null : str(json.title, 300), camera, fileDirty: !!json.fileDirty, nodes, edges };
+  return { title: json.title == null ? null : str(json.title, 300), camera, fileDirty: !!json.fileDirty, nodes, edges, flows };
 }
 
 /** A boundary drawn as an outline only: it surrounds things without containing them. */

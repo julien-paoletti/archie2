@@ -1,5 +1,5 @@
 import { boundariesCrossed, busMembers, isOverlay, resolveType, showsAsCard } from '../engine/schema.js';
-import { boundsOf, clamp, dist, inflate, intersects, lerpRect, union } from '../engine/geometry.js';
+import { boundsOf, clamp, dist, inflate, intersects, lerpRect, pointAlong, union } from '../engine/geometry.js';
 import { SIDES, labelPoint, routeEdge, routeSimpleOrthogonal, sideNormal } from '../engine/routing.js';
 import { LEGEND, legendEntries } from '../engine/legend.js';
 import { SVGContext } from './svg-context.js';
@@ -241,6 +241,7 @@ export class CanvasRenderer {
     const animate = patch.animate || source === 'undo' || source === 'redo' || source === 'cancel';
     const few = patch.ops.length <= 400;
     for (const op of patch.ops) {
+      if (op.k === 'flow') continue;
       if (op.k === 'edge') {
         if (op.t === 'add' && few) this.#appear.set(op.id, now);
         continue;
@@ -316,7 +317,7 @@ export class CanvasRenderer {
       else (doc.isContainer(n) && !n.collapsed && !showsAsCard(doc, n) ? containers : leaves).push([n, r]);
     }
     this.shadows = leaves.length < 400;
-    this.#focus = this.#exporting ? null : ed.dependencyFocus();
+    this.#focus = this.#exporting ? null : ed.flowFocus() ?? ed.dependencyFocus();
     this.#members = new Set();
     if (!this.#exporting) {
       for (const id of ed.selection) {
@@ -380,6 +381,7 @@ export class CanvasRenderer {
         if (n.collapsed) this.#drawCollapsed(ctx, n, r);
         else this.#drawNode(ctx, n, r);
       }
+      this.#flowBadges(ctx, routed);
       for (const [n, r] of overlays) this.#drawOverlay(ctx, n, r, 'tab');
     }
     this.#drawGhosts(ctx);
@@ -1155,7 +1157,10 @@ export class CanvasRenderer {
     const rs = this.#exporting ? 0 : this.#fx.value('r' + e.id, related ? 1 : 0);
     // Link a dragged firewall (or other inline node) would be inserted into: strong highlight.
     const is = this.#exporting ? 0 : this.#fx.value('i' + e.id, ed.overlay.insertEdge === e.id ? 1 : 0, 22);
-    const hi = Math.max(ss, hs * 0.75, rs * 0.6, is);
+    // The step of a flow being played: highlighted, dots running the way the step goes.
+    const step = this.#exporting ? null : ed.currentStep();
+    const fs = this.#exporting ? 0 : this.#fx.value('c' + e.id, step?.edge === e.id ? 1 : 0, 16);
+    const hi = Math.max(ss, hs * 0.75, rs * 0.6, is, fs);
     const ap = this.#appearT(e.id);
     const width = et.width ?? 1.5;
     const lw = Math.max(width, 1 / z);
@@ -1179,11 +1184,11 @@ export class CanvasRenderer {
     ctx.strokeStyle = color;
     ctx.stroke();
     ctx.setLineDash([]);
-    if ((ss > 0.5 || hs > 0.6 || is > 0.5) && lod > 0) {
-      // Marching dots show direction on focused edges.
+    if ((ss > 0.5 || hs > 0.6 || is > 0.5 || fs > 0.5) && lod > 0) {
+      // Marching dots show direction on focused edges (backwards for a flow's response step).
       this.#tracePath(ctx, route, shorten);
       ctx.setLineDash([0.01, 16]);
-      ctx.lineDashOffset = -((this.now / 28) % 16);
+      ctx.lineDashOffset = (step?.edge === e.id && step.reverse ? 1 : -1) * ((this.now / 28) % 16);
       ctx.lineWidth = lw + 1.6;
       ctx.strokeStyle = th.flow;
       ctx.stroke();
@@ -1322,6 +1327,87 @@ export class CanvasRenderer {
         ctx.fillText(this.#ellipsize(ctx, proto, 220), x, py + 0.5);
       }
     }
+    ctx.restore();
+  }
+
+  /**
+   * Numbered badges on the links of the flow on show, near where each step starts (several
+   * steps on one link share a badge: "2 · 5"). While playing, steps not reached yet are grey
+   * and the current one pulses, with its label in a callout. Constant size on screen.
+   */
+  #flowBadges(ctx, routed) {
+    const { ed, theme: th, z } = this;
+    const f = !this.#exporting && this.lod > 0 && ed.flow.id && ed.doc.flows.get(ed.flow.id);
+    if (!f) return;
+    const routes = new Map(routed.map(([e, r]) => [e.id, r]));
+    const byEdge = new Map();
+    f.steps.forEach((s, i) => {
+      if (!routes.has(s.edge)) return;
+      if (!byEdge.has(s.edge)) byEdge.set(s.edge, []);
+      byEdge.get(s.edge).push({ i, reverse: !!s.reverse });
+    });
+    const playing = ed.flow.step;
+    let callout = null;
+    for (const [edgeId, list] of byEdge) {
+      const route = routes.get(edgeId);
+      const p = pointAlong(route.poly, list[0].reverse ? 0.8 : 0.2);
+      const current = list.some((s) => s.i === playing);
+      const ahead = playing >= 0 && list.every((s) => s.i > playing);
+      const text = list.map((s) => s.i + 1).join(' · ');
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.scale(1 / z, 1 / z);
+      ctx.font = `700 11px ${FONT}`;
+      const w = Math.max(20, this.#measureText(ctx, text) + 12);
+      if (current) {
+        const pulse = (this.now % 1400) / 1400;
+        ctx.beginPath();
+        ctx.roundRect(-w / 2 - 4 - 6 * pulse, -14 - 6 * pulse, w + 8 + 12 * pulse, 28 + 12 * pulse, 14 + 6 * pulse);
+        ctx.fillStyle = withAlpha(th.accent, 0.3 * (1 - pulse));
+        ctx.fill();
+        this.#animating = true;
+      }
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -10, w, 20, 10);
+      ctx.fillStyle = ahead ? (th.dark ? '#3a4150' : '#cbd2dc') : th.accent;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = th.bg;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 0, 0.5);
+      ctx.restore();
+      if (current) callout = { p, w };
+    }
+    const step = ed.currentStep();
+    if (!callout || !step) return;
+    // The current step's label, next to its badge.
+    const e = ed.doc.edges.get(step.edge);
+    const name = (id) => ed.doc.nodes.get(id)?.label || '—';
+    const [from, to] = step.reverse ? [e.target, e.source] : [e.source, e.target];
+    const text = `${step.index + 1}. ${step.label || `${name(from)} → ${name(to)}`}`;
+    ctx.save();
+    ctx.translate(callout.p.x, callout.p.y);
+    ctx.scale(1 / z, 1 / z);
+    ctx.font = `600 12.5px ${FONT}`;
+    const label = this.#ellipsize(ctx, text, 320);
+    const w = this.#measureText(ctx, label) + 20, x = callout.w / 2 + 8, y = -30;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, 26, 8);
+    ctx.fillStyle = th.labelBg;
+    ctx.shadowColor = th.shadowStrong;
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = th.accent;
+    ctx.stroke();
+    ctx.fillStyle = th.text;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x + 10, y + 13.5);
     ctx.restore();
   }
 

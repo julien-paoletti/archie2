@@ -114,6 +114,44 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
   sync();
 }
 
+/** While a flow plays: which step, what happens, previous / next, stop. */
+export function createFlowPlayer(editor, root) {
+  const name = h('strong', { class: 'fp-name' });
+  const count = h('span', { class: 'fp-count' });
+  const label = h('span', { class: 'fp-label' });
+  const prev = iconButton('prev', 'Previous step  ·  ←', () => editor.stepFlow(-1));
+  const next = iconButton('next', 'Next step  ·  →', () => editor.stepFlow(1));
+  const bar = h('div', { class: 'panel toolbar flow-player', role: 'toolbar', 'aria-label': 'Flow' },
+    svg(ui.flow, { size: 16 }), name, h('i', { class: 'sep' }), prev, count, next, label, h('i', { class: 'sep' }),
+    iconButton('stop', 'Stop  ·  Esc', () => editor.showFlow(editor.flow.id)));
+  root.append(bar);
+  const sync = () => {
+    const f = editor.flow.step >= 0 && editor.doc.flows.get(editor.flow.id);
+    document.documentElement.classList.toggle('playing', !!f);
+    if (!f) return;
+    const s = editor.currentStep();
+    const e = editor.doc.edges.get(s.edge);
+    const nm = (id) => editor.doc.nodes.get(id)?.label || '—';
+    const [from, to] = s.reverse ? [e.target, e.source] : [e.source, e.target];
+    name.textContent = f.name || 'Flow';
+    count.textContent = `${s.index + 1} / ${f.steps.length}`;
+    label.textContent = s.label ? `${nm(from)} → ${nm(to)}: ${s.label}` : `${nm(from)} → ${nm(to)}`;
+    prev.disabled = s.index === 0;
+    next.disabled = s.index === f.steps.length - 1;
+  };
+  editor.on('flow', sync);
+  editor.on('docchange', sync);
+  sync();
+}
+
+/** Menu of the diagram's flows, to play one. */
+function flowMenu(anchor, editor, placement) {
+  const flows = [...editor.doc.flows.values()];
+  popover(anchor, flows.length
+    ? flows.map((f) => ['play', `${f.name || 'Untitled flow'}  (${f.steps.length})`, () => editor.playFlow(f.id), null, { disabled: !f.steps.length }])
+    : [[null, 'No flows yet', () => {}, null, { disabled: true }]], placement);
+}
+
 /**
  * While presenting, the only chrome: the title, the view tools and the way out (Exit, or
  * "Edit a copy" for a view-only link).
@@ -122,18 +160,20 @@ export function createPresentBar(editor, app, root) {
   const title = h('strong', { class: 'present-title' });
   const badge = h('span', { class: 'present-badge' }, 'View only');
   const deps = iconButton('deps', 'Dependencies  ·  D', () => editor.toggleDependencies());
+  const flows = iconButton('flow', 'Play a flow', () => flowMenu(flows, editor, 'below'));
   const theme = iconButton('moon', 'Toggle theme', () => app.toggleTheme());
   const exit = h('button', { class: 'btn btn-label', type: 'button', onclick: () => (app.viewOnly ? app.editCopy() : app.present(false)) });
   const bar = h('div', { class: 'panel toolbar present-bar' },
     h('div', { class: 'logo', 'aria-hidden': 'true' }, svg('M12 3 3 8l9 5 9-5z M3 16l9 5 9-5 M3 12l9 5 9-5', { size: 14, stroke: 2.2 })),
     title, badge, h('i', { class: 'sep' }),
-    iconButton('fit', tip('Zoom to fit', 'view.fit', editor), () => editor.fitView()), deps, theme,
+    iconButton('fit', tip('Zoom to fit', 'view.fit', editor), () => editor.fitView()), deps, flows, theme,
     h('i', { class: 'sep' }), exit);
   root.append(bar);
   const sync = () => {
     title.textContent = app.title || 'Untitled';
     badge.hidden = !app.viewOnly;
     deps.classList.toggle('on', editor.focusDeps);
+    flows.hidden = !editor.doc.flows.size;
     theme.replaceChildren(svg(app.theme === 'dark' ? ui.sun : ui.moon));
     exit.replaceChildren(...(app.viewOnly
       ? [svg(ui.edit), h('span', {}, 'Edit a copy')]
@@ -143,6 +183,7 @@ export function createPresentBar(editor, app, root) {
   app.on('change', sync);
   app.on('title', sync);
   editor.on('focus', sync);
+  editor.on('docchange', sync);
   sync();
 }
 
@@ -331,6 +372,12 @@ export function createHints(editor, root) {
     } else if (editor.gesture instanceof ConnectGesture) {
       key = 'connect';
       parts = [t('Release on a node to link'), dot(), t('on empty space to create one')];
+    } else if (editor.flow.recording) {
+      key = 'record';
+      parts = [t('Recording a flow: click the links a request goes through, in order'), dot(), k('escape'), t('done')];
+    } else if (editor.flow.step >= 0) {
+      key = 'play';
+      parts = [k('arrowleft'), k('arrowright'), t('step through the flow'), dot(), k('escape'), t('stop')];
     } else if (editor.focusDeps) {
       const f = editor.dependencyFocus();
       const exit = [dot(), k('d'), t('or'), k('escape'), t('exit')];
@@ -370,7 +417,7 @@ export function createHints(editor, root) {
     el.replaceChildren(...parts);
     el.classList.add('in');
   };
-  for (const ev of ['selectionchange', 'gesture', 'docchange', 'focus']) editor.on(ev, update);
+  for (const ev of ['selectionchange', 'gesture', 'docchange', 'focus', 'flow']) editor.on(ev, update);
   update();
 }
 

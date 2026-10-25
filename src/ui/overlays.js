@@ -35,6 +35,10 @@ export function createCommandPalette(editor, app, { icons }) {
       if (c.hidden || !editor.allowed(c)) continue;
       out.push({ kind: 'cmd', title: c.title, group: c.group ?? 'General', keys: c.keys?.[0], run: () => editor.run(c.id), enabled: !c.enabled || c.enabled() });
     }
+    for (const f of editor.doc.flows.values()) {
+      out.push({ kind: 'cmd', title: `Play flow: ${f.name || 'Untitled flow'}`, group: 'Flows', run: () => editor.playFlow(f.id), enabled: f.steps.length > 0 });
+    }
+    if (!editor.readOnly) out.push({ kind: 'cmd', title: 'New flow', group: 'Flows', run: () => editor.createFlow(), enabled: true });
     for (const n of editor.doc.nodes.values()) {
       const t = resolveType(editor.schema, n);
       out.push({ kind: 'node', title: n.label || t.label, group: n.data?.stereotype || t.label, icon: icons[t.icon], color: n.style?.color ?? t.color, run: () => editor.reveal(n.id), enabled: true });

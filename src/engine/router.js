@@ -151,6 +151,7 @@ export class EdgeRouter {
     }
     const dirty = [];
     for (const op of patch.ops) {
+      if (op.k === 'flow') continue;
       if (op.k === 'edge') {
         this.#cache.delete(op.id);
         continue;
