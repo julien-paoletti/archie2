@@ -464,7 +464,7 @@ export class CanvasRenderer {
       ctx.fillStyle = withAlpha(th.accent, 0.08 * ds);
       ctx.fill();
     }
-    ctx.lineWidth = Math.max(1.25, 1 / z);
+    ctx.lineWidth = this.#border(n, 1.25);
     ctx.strokeStyle = withAlpha(color, 0.38 + 0.3 * hs);
     if (type.dashed) ctx.setLineDash([6, 4]);
     ctx.stroke();
@@ -552,7 +552,7 @@ export class CanvasRenderer {
         ctx.fill();
       }
       const k = Math.max(1, 0.8 / z);
-      ctx.lineWidth = Math.max(overlay ? 2 : 1.75, 1.25 / z);
+      ctx.lineWidth = Math.max(n.style?.borderWidth ?? (overlay ? 2 : 1.75), 1.25 / z);
       // Dash-dot marks an outline that doesn't contain; dashes a containing boundary.
       ctx.setLineDash(overlay ? [12 * k, 5 * k, 2 * k, 5 * k] : [9 * k, 6 * k]);
       ctx.strokeStyle = ds > 0.5 ? th.accent : withAlpha(color, 0.7 + 0.3 * hs);
@@ -695,7 +695,7 @@ export class CanvasRenderer {
     ctx.shadowColor = 'transparent';
     ctx.fillStyle = withAlpha(color, th.dark ? 0.1 : 0.06);
     ctx.fill();
-    ctx.lineWidth = Math.max(1.25, 1 / z);
+    ctx.lineWidth = this.#border(n, 1.25);
     ctx.strokeStyle = withAlpha(color, 0.5 + 0.35 * hs);
     ctx.stroke();
 
@@ -801,9 +801,11 @@ export class CanvasRenderer {
       ctx.fillStyle = withAlpha(color, shape === 'bus' ? (th.dark ? 0.2 : 0.12) : th.dark ? 0.18 : 0.16);
       ctx.fill();
     }
-    ctx.lineWidth = Math.max(shape === 'bus' ? 1.5 : 1, 1 / z);
+    ctx.lineWidth = this.#border(n, shape === 'bus' ? 1.5 : 1);
     if (type.dashed) ctx.setLineDash([5, 4]);
-    ctx.strokeStyle = shape === 'note' ? withAlpha(color, 0.45) : shape === 'bus' ? withAlpha(color, 0.65) : th.nodeStroke;
+    // A border made thicker on purpose is meant to be seen: in the element's colour.
+    ctx.strokeStyle = shape === 'note' ? withAlpha(color, 0.45) : shape === 'bus' ? withAlpha(color, 0.65)
+      : n.style?.borderWidth ? withAlpha(color, 0.85) : th.nodeStroke;
     ctx.stroke();
     if (hs > 0.01) {
       ctx.strokeStyle = withAlpha(color, 0.75 * hs * (1 - ss));
@@ -1117,6 +1119,11 @@ export class CanvasRenderer {
       }
     }
     ctx.restore();
+  }
+
+  /** An element's border width: its own (`style.borderWidth`), else the shape's; never under a screen pixel. */
+  #border(n, base) {
+    return Math.max(n.style?.borderWidth ?? base, 1 / this.z);
   }
 
   #selectionRing(ctx, r, radius, ss) {

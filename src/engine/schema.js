@@ -26,8 +26,11 @@ const points = (v) => {
   const list = Array.isArray(v) ? v.slice(0, 200).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)) : [];
   return list.length ? list.map((p) => ({ x: num(p.x, 0), y: num(p.y, 0) })) : undefined;
 };
+/** Border widths an element can choose (absent: the shape's own). */
+export const BORDER_WIDTHS = [2, 3, 4];
 const NODE_STYLE = {
   color, textSize: oneOf('sm', 'lg', 'xl'), align: oneOf('center', 'right'), autoWidth: oneOf(false),
+  borderWidth: oneOf(...BORDER_WIDTHS),
 };
 const EDGE_STYLE = {
   color, routing: oneOf('curved', 'straight'), points, labelT: (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined),

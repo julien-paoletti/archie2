@@ -12,7 +12,7 @@ const schema = {
 async function editor() {
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema });
-  ed.doc.addNode({ id: 'a', style: { color: '#ef4444' } });
+  ed.doc.addNode({ id: 'a', style: { color: '#ef4444', borderWidth: 3 } });
   ed.doc.addNode({ id: 'b', x: 300 });
   ed.doc.addNode({ id: 'c', x: 600, style: { color: '#22c55e' } });
   ed.doc.addNode({ id: 't', type: 'text', y: 200, style: { textSize: 'lg', align: 'center', color: '#3b82f6' } });
@@ -32,7 +32,7 @@ test('copy / paste style between elements, links and text, in one undo step', as
   assert.equal(notices.length, 1);
   ed.setSelection(['b', 'c', 'e2']);
   ed.pasteStyle();
-  assert.equal(ed.doc.getNode('b').style.color, '#ef4444');
+  assert.deepEqual(ed.doc.getNode('b').style, { color: '#ef4444', borderWidth: 3 }, 'colour and border width');
   assert.equal(ed.doc.getNode('c').style.color, '#ef4444');
   assert.deepEqual(ed.doc.getEdge('e2').style, { color: '#ef4444' }, 'element → link: colour only');
   ed.undo();

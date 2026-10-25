@@ -1,5 +1,5 @@
 import { overlaps, polylineCrossesRect } from '../engine/geometry.js';
-import { boundariesCrossed, busMembers, resolveType } from '../engine/schema.js';
+import { BORDER_WIDTHS, boundariesCrossed, busMembers, resolveType } from '../engine/schema.js';
 import { h, isEditable, kbd, popover, svg, ui } from './dom.js';
 import { linkName, safeUrl, splitLinks } from './urls.js';
 
@@ -134,11 +134,27 @@ export function createInspector(editor, app, root, { icons, palette }) {
     ];
   };
 
+  /**
+   * Border width of elements (free text has none): Auto (the shape's own) or 2–4 px. With
+   * several elements whose widths differ, no option is highlighted.
+   */
+  const borderField = (ids) => {
+    const boxes = () => ids.map((id) => doc.nodes.get(id)).filter((x) => x && !editor.isText(x.id));
+    if (!boxes().length) return null;
+    const common = () => {
+      const values = new Set(boxes().map((x) => x.style?.borderWidth ?? null));
+      return values.size === 1 ? [...values][0] : undefined;
+    };
+    return section('Border', segmented([[null, 'Auto'], ...BORDER_WIDTHS.map((w) => [w, `${w} px`])], common,
+      (v) => editor.setStyle(boxes().map((x) => x.id), { borderWidth: v }), { labels: true }));
+  };
+
   /** Legend: just its title; the content follows the diagram. */
   const legendView = (n) => [
     section(null, typePicker(n)),
     section(null, row('Title', text(() => doc.nodes.get(n.id)?.label, (v, s) => doc.transact('Rename', () => doc.update(n.id, { label: v }), { merge: s }), { placeholder: 'Legend' })),
       h('p', { class: 'muted small', style: { marginTop: '10px' } }, 'Lists the kinds of elements, boundaries and links in use, and updates itself as the diagram changes.')),
+    borderField([n.id]),
     section(null, h('div', { class: 'actions' },
       action('copy', 'Duplicate', () => editor.duplicate(), 'mod+d'),
       action('trash', 'Delete', () => editor.deleteSelection(), 'delete', 'danger'),
@@ -192,6 +208,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
         linkChips(() => get()?.data?.links),
       ),
       section('Color', swatches([n.id], () => get()?.style?.color)),
+      borderField([n.id]),
       section('Geometry', h('div', { class: 'grid4' },
         row('X', number(() => get().x, (v) => editor.doc.transact('Move', () => doc.moveBy([n.id], v - get().x, 0)))),
         row('Y', number(() => get().y, (v) => editor.doc.transact('Move', () => doc.moveBy([n.id], 0, v - get().y)))),
@@ -302,6 +319,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
         h('button', { type: 'button', class: 'btn', 'data-tip': 'Distribute vertically', disabled: top.length < 3, onclick: () => editor.distribute('y') }, svg(ui.distV)),
       )),
       nodes.length && section('Color', swatches([...nodes, ...edges], () => null)),
+      nodes.length && borderField(nodes),
       section(null, h('div', { class: 'actions' },
         nodes.length && action('group', 'Group into module', () => editor.group(), 'mod+g'),
         nodes.length && wrap && action('boundary', wrap.title, () => wrap.run(), 'b'),

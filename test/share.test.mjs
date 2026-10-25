@@ -68,8 +68,10 @@ test('sanitizeDiagram keeps only known data and style fields, with the right typ
       {
         id: 'c', type: 'boundary',
         data: { variant: 'network', status: 'planned', links: ['ok.io', 3, 'b.io'], borderOnly: true },
-        style: { color: '#22C55E' },
+        style: { color: '#22C55E', borderWidth: 3 },
       },
+      { id: 'd', type: 'service', style: { borderWidth: 7 } },
+      { id: 'g', type: 'service', style: { borderWidth: '3' } },
     ],
     edges: [
       { id: 'e', source: 'b', target: 'c', type: 'hasOwnProperty', data: { tech: 7 },
@@ -82,7 +84,9 @@ test('sanitizeDiagram keeps only known data and style fields, with the right typ
   assert.deepEqual(b.data, { tech: 'Go' });
   assert.deepEqual(b.style, { align: 'center' }, 'a url() colour is dropped (it could leak who opened the link)');
   assert.deepEqual(c.data, { variant: 'network', status: 'planned', links: ['ok.io', 'b.io'], borderOnly: true });
-  assert.deepEqual(c.style, { color: '#22C55E' });
+  assert.deepEqual(c.style, { color: '#22C55E', borderWidth: 3 });
+  assert.deepEqual(out.nodes[3].style, {}, 'a width outside the choices is dropped');
+  assert.deepEqual(out.nodes[4].style, {}, 'so is one written as text');
   const [e, f] = out.edges;
   assert.equal(e.type, 'uses');
   assert.deepEqual(e.data, {});

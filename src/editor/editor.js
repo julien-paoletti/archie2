@@ -1547,8 +1547,8 @@ export class Editor extends Emitter {
   }
 
   /**
-   * Copy the selected item's look: colour and text style for an element; colour, routing and
-   * kind for a link. Hand-made shapes (waypoints, label position) are not part of a style.
+   * Copy the selected item's look: colour and border width for an element (colour and text
+   * style for free text); colour, routing and kind for a link. Hand-made shapes (waypoints, label position) are not part of a style.
    */
   copyStyle() {
     const id = this.singleSelected();
@@ -1556,7 +1556,7 @@ export class Editor extends Emitter {
     if (!o) return;
     const kind = this.doc.kindOf(id);
     const text = this.isText(id);
-    const keys = kind === 'edge' ? ['color', 'routing'] : text ? ['color', 'textSize', 'align'] : ['color'];
+    const keys = kind === 'edge' ? ['color', 'routing'] : text ? ['color', 'textSize', 'align'] : ['color', 'borderWidth'];
     this.styleClip = { kind, text, type: kind === 'edge' ? o.type : null, style: Object.fromEntries(keys.map((k) => [k, o.style?.[k] ?? null])) };
     this.notify('Style copied: select others and paste it', 'copy');
   }
