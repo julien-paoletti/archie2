@@ -90,6 +90,7 @@ export class CanvasRenderer {
   #memberColor = '#0284c7';
   #focus = null;
   #legend = { version: -1, sections: [] };
+  #tagMemo = null;
 
   constructor(editor, canvas, { theme, icons = {} }) {
     this.ed = editor;
@@ -373,7 +374,8 @@ export class CanvasRenderer {
       for (const [e, route] of routed) this.#drawEdge(ctx, e, route);
       for (const [n, r] of overlays) this.#drawOverlay(ctx, n, r, 'outline');
       this.#crossingMarkers(ctx, routed, [...containers, ...overlays]);
-      for (const [e, route] of routed) this.#drawEdgeLabel(ctx, e, route);
+      const tags = this.#placeTags(ctx, routed);
+      for (const [e] of routed) this.#drawEdgeLabel(ctx, e, tags.get(e.id));
       for (const [n, r] of leaves) {
         if (n.collapsed) this.#drawCollapsed(ctx, n, r);
         else this.#drawNode(ctx, n, r);
@@ -1193,29 +1195,109 @@ export class CanvasRenderer {
   }
 
   /**
-   * Link tag: the label, with the protocol (`data.tech`) under it in monospace; either one
-   * alone gives a single-line tag. Records the tag and protocol-line rects for hit testing
-   * and in-place editing.
+   * Link tag size and text: the label, with the protocol (`data.tech`) under it in monospace;
+   * either one alone gives a single-line tag. Null when the link has neither.
    */
-  #drawEdgeLabel(ctx, e, route) {
+  #tag(ctx, e) {
     const count = this.#bundles.get(e.id);
     const text = count ? `${count} links` : e.label;
     const proto = count ? '' : e.data?.tech;
-    this.#labels.delete(e.id);
-    this.#captions.delete(e.id);
-    if (!text && !proto) return;
-    const editing = this.ed.editingId === e.id ? this.ed.editingField : null;
-    const th = this.theme;
-    const sel = !this.#exporting && this.ed.selection.has(e.id);
-    const { x, y } = count ? route.mid : labelPoint(route, e.style?.labelT);
-    ctx.save();
-    ctx.globalAlpha = 1 - 0.82 * this.#peek('f' + e.id);
+    if (!text && !proto) return null;
     ctx.font = `500 11.5px ${FONT}`;
     const tw = text ? Math.min(this.#measureText(ctx, text), 220) : 0;
     ctx.font = `500 10px ${MONO}`;
     const pw = proto ? Math.min(this.#measureText(ctx, proto), 220) : 0;
+    return { text, proto, bundle: !!count, w: Math.max(tw, pw) + 14, h: text && proto ? 33 : 21 };
+  }
+
+  /**
+   * Where each link tag goes. By default, halfway along the link; where that would cover
+   * another tag or an element, the tag slides along its link to a clear spot, else the least
+   * covered one (covering a tag counts more than an element's edge). Tags with the fewest
+   * clear spots are placed first, so a tag with room to move doesn't take the only spot of
+   * one that has none. Tags the user placed (`labelT`) and bundle counts stay put.
+   * Returns Map<edgeId, {x, y}>.
+   */
+  #placeTags(ctx, routed) {
+    // While the document doesn't change (panning, zooming, animations), tags keep their
+    // places: only links coming into view are placed, around the ones already there.
+    const version = this.ed.doc.version;
+    let memo = this.#tagMemo;
+    if (!memo || memo.version !== version) memo = this.#tagMemo = { version, placed: new Map() };
+    const fresh = routed.filter(([e, r]) => memo.placed.get(e.id)?.route !== r);
+    if (fresh.length) {
+      const ids = new Set(fresh.map(([e]) => e.id));
+      const others = [...memo.placed].filter(([id, v]) => v.rect && !ids.has(id)).map(([, v]) => v.rect);
+      const spots = this.#computeTags(ctx, fresh, others);
+      // Links without a tag are remembered too, so they don't count as new on every frame.
+      for (const [e, route] of fresh) memo.placed.set(e.id, spots.get(e.id) ?? { route, p: null, rect: null });
+    }
+    return new Map(routed.map(([e]) => [e.id, memo.placed.get(e.id)?.p]));
+  }
+
+  /** Place the tags of `routed` around the `others` (tag rects already placed). Map<id, {p, rect, route}>. */
+  #computeTags(ctx, routed, others = []) {
+    const doc = this.ed.doc, hidden = doc.hidden();
+    const area = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+    const onCards = (rect) => {
+      let s = 0;
+      for (const id of doc.index.query(rect)) {
+        const n = doc.nodes.get(id);
+        if (!hidden.has(id) && (!doc.isContainer(n) || n.collapsed || showsAsCard(doc, n)) && !isOverlay(doc, n)) s += area(n, rect);
+      }
+      return s;
+    };
+    // Beyond a few hundred tags the search costs more than it brings: keep default places.
+    const crowded = routed.filter(([e]) => e.label || e.data?.tech).length > 400;
+    const tags = [];
+    for (const [e, route] of routed) {
+      const tag = this.#tag(ctx, e);
+      if (!tag) continue;
+      const fixed = tag.bundle || e.style?.labelT != null || crowded;
+      const spots = (fixed ? [null] : [null, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78]).map((t) => {
+        const p = t === null ? (tag.bundle ? route.mid : labelPoint(route, e.style?.labelT)) : labelPoint(route, t);
+        const rect = { x: p.x - tag.w / 2 - 3, y: p.y - tag.h / 2 - 3, w: tag.w + 6, h: tag.h + 6 };
+        return { p, rect, base: fixed ? 0 : onCards(rect) };
+      });
+      tags.push({ id: e.id, route, spots, fixed, free: fixed ? -1 : spots.filter((s) => !s.base).length });
+    }
+    tags.sort((a, b) => a.free - b.free);
+    // Greedy placement, then two repair passes: each tag moves to its best spot given where
+    // all the others ended up (a tag placed early may have blocked a later one needlessly).
+    const chosen = new Array(tags.length).fill(null);
+    const pick = (i) => {
+      let best = null;
+      for (const s of tags[i].spots) {
+        let score = s.base;
+        for (let j = 0; j < tags.length; j++) if (j !== i && chosen[j]) score += 3 * area(chosen[j].rect, s.rect);
+        for (const r of others) score += 3 * area(r, s.rect);
+        if (!best || score < best.score) best = { ...s, score };
+        if (score === 0) break;
+      }
+      chosen[i] = best;
+    };
+    for (let i = 0; i < tags.length; i++) pick(i);
+    for (let pass = 0; pass < 2 && !crowded; pass++) for (let i = 0; i < tags.length; i++) if (!tags[i].fixed) pick(i);
+    return new Map(tags.map((t, i) => [t.id, { p: chosen[i].p, rect: chosen[i].rect, route: t.route }]));
+  }
+
+  /**
+   * Draw a link's tag at `at` (from #placeTags). Records the tag and protocol-line rects for
+   * hit testing and in-place editing.
+   */
+  #drawEdgeLabel(ctx, e, at) {
+    this.#labels.delete(e.id);
+    this.#captions.delete(e.id);
+    const tag = at && this.#tag(ctx, e);
+    if (!tag) return;
+    const { text, proto, w, h } = tag;
+    const editing = this.ed.editingId === e.id ? this.ed.editingField : null;
+    const th = this.theme;
+    const sel = !this.#exporting && this.ed.selection.has(e.id);
+    const { x, y } = at;
+    ctx.save();
+    ctx.globalAlpha = 1 - 0.82 * this.#peek('f' + e.id);
     const two = !!(text && proto);
-    const w = Math.max(tw, pw) + 14, h = two ? 33 : 21;
     const ly = two ? y - 7 : y, py = two ? y + 8 : y;
     this.#labels.set(e.id, { x: x - w / 2, y: y - h / 2, w, h, line: { x: x - 100, y: ly - 10, w: 200, h: 20 } });
     ctx.beginPath();

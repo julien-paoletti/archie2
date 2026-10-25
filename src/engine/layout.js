@@ -12,6 +12,9 @@
  * pulls nodes towards their neighbours while keeping order and spacing exact.
  */
 
+/** Space kept on each side of a link label between two ranks. */
+const LABEL_MARGIN = 18;
+
 const DEFAULTS = {
   direction: 'LR',
   nodeGap: 40,
@@ -55,12 +58,18 @@ export function layoutHierarchy(doc, options = {}) {
       return -1;
     };
     const links = [];
-    const seen = new Set();
+    const seen = new Map();
     for (const e of edges) {
       const s = lift(e.source), t = lift(e.target);
-      if (s < 0 || t < 0 || s === t || seen.has(s + ':' + t)) continue;
-      seen.add(s + ':' + t);
-      links.push([s, t]);
+      if (s < 0 || t < 0 || s === t) continue;
+      const room = labelRoom(e, o.direction !== 'TB');
+      const link = seen.get(s + ':' + t);
+      if (link) link[2] = Math.max(link[2], room);
+      else {
+        const l = [s, t, room];
+        seen.set(s + ':' + t, l);
+        links.push(l);
+      }
     }
     const arranged = arrange(items, links, o);
     return { items, pos: arranged.pos, w: arranged.w, h: arranged.h };
@@ -90,7 +99,22 @@ export function layoutHierarchy(doc, options = {}) {
   return result;
 }
 
-/** Arrange sized items given directed links (indices). Returns top-left positions and extent. */
+/**
+ * Room a link's tag (label over protocol) needs along the main axis: its width when ranks
+ * are columns, its height when they are rows. Estimated from the text (the engine has no
+ * fonts), matching the renderer's 220px cap and padding.
+ */
+export function labelRoom(e, horizontal) {
+  const label = e.label ?? '', tech = e.data?.tech ?? '';
+  if (!label && !tech) return 0;
+  if (!horizontal) return label && tech ? 33 : 21;
+  return Math.min(Math.max(label.length * 6.6, tech.length * 6.3), 220) + 14;
+}
+
+/**
+ * Arrange sized items given directed links `[source, target, room?]` (indices; `room` is the
+ * space the link's label needs between ranks). Returns top-left positions and extent.
+ */
 export function arrange(items, links, o = DEFAULTS) {
   const n = items.length;
   if (!n) return { pos: [], w: 0, h: 0 };
@@ -155,9 +179,13 @@ function layered(comp, links, items, o, mainOf, crossOf) {
   const N = comp.length;
   const local = new Map(comp.map((g, l) => [g, l]));
   const out = Array.from({ length: N }, () => []);
-  for (const [s, t] of links) {
+  // Label room per pair, either way round (cycle breaking may reverse a link).
+  const room = new Map();
+  for (const [s, t, r = 0] of links) {
     const a = local.get(s), b = local.get(t);
-    if (a !== undefined && b !== undefined) out[a].push(b);
+    if (a === undefined || b === undefined) continue;
+    out[a].push(b);
+    for (const key of [a + ':' + b, b + ':' + a]) room.set(key, Math.max(room.get(key) ?? 0, r));
   }
 
   // 1. Break cycles: DFS from sources, reversing back edges.
@@ -325,15 +353,26 @@ function layered(comp, links, items, o, mainOf, crossOf) {
   }
   for (let r = 0; r < R; r++) placeLayer(layers[r], (v) => [...up[v], ...down[v]]);
 
-  // 6. Main-axis placement: ranks are columns (LR) or rows (TB), nodes centred in them.
+  // 6. Main-axis placement: ranks are columns (LR) or rows (TB), nodes centred in them. A gap
+  // widens to fit the labels sitting in it: a link's label is halfway along, so in the
+  // middle gap it crosses.
   const rankSize = new Float64Array(R);
   for (const v of V) rankSize[v.rank] = Math.max(rankSize[v.rank], v.m);
+  const gapSize = new Float64Array(R).fill(o.rankGap);
+  for (let u = 0; u < N; u++) {
+    for (const v of succ[u]) {
+      const r = room.get(u + ':' + v) ?? 0;
+      const g = rank[u] + Math.floor((rank[v] - rank[u] - 1) / 2);
+      if (r) gapSize[g] = Math.max(gapSize[g], r + 2 * LABEL_MARGIN);
+    }
+  }
   const rankStart = new Float64Array(R);
   let acc = 0;
   for (let r = 0; r < R; r++) {
     rankStart[r] = acc;
-    acc += rankSize[r] + o.rankGap;
+    acc += rankSize[r] + gapSize[r];
   }
+  acc -= gapSize[R - 1] - o.rankGap;
   let minC = Infinity, maxC = -Infinity;
   for (let u = 0; u < N; u++) {
     minC = Math.min(minC, C[u] - V[u].c / 2);
