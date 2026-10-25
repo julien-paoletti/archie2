@@ -255,34 +255,42 @@ class App extends Emitter {
     }
   }
 
+  // Exports cover the selection when there is one (see editor.exportScope), else everything shown.
   async exportPNG() {
-    const blob = await renderer.exportPNG({ scale: 2 });
-    if (blob) download(blob, `${slug(this.title)}.png`);
-    else toast('Nothing to export yet', { icon: 'image' });
+    const only = editor.exportScope();
+    const blob = await renderer.exportPNG({ scale: 2, only });
+    if (!blob) return toast('Nothing to export yet', { icon: 'image' });
+    download(blob, `${slug(this.title)}.png`);
+    if (only) toast('Exported the selection as PNG', { icon: 'image' });
   }
 
   exportSVG() {
-    const svg = renderer.exportSVG();
-    if (svg) download(new Blob([svg], { type: 'image/svg+xml' }), `${slug(this.title)}.svg`);
-    else toast('Nothing to export yet', { icon: 'image' });
+    const only = editor.exportScope();
+    const svg = renderer.exportSVG({ only });
+    if (!svg) return toast('Nothing to export yet', { icon: 'image' });
+    download(new Blob([svg], { type: 'image/svg+xml' }), `${slug(this.title)}.svg`);
+    if (only) toast('Exported the selection as SVG', { icon: 'image' });
   }
 
-  /** The diagram as text: 'mermaid' | 'plantuml' | 'structurizr' | 'markdown'. */
-  textOf(format) {
+  /** The diagram (or the selection) as text: 'mermaid' | 'plantuml' | 'structurizr' | 'markdown'. */
+  textOf(format, doc = editor.exportDocument()) {
     const opts = { title: this.title, direction: editor.settings.layoutDirection };
-    return TEXT_FORMATS[format].build(editor.doc, opts);
+    return TEXT_FORMATS[format].build(doc, opts);
   }
 
   exportText(format) {
-    if (!editor.doc.nodes.size) return toast('Nothing to export yet', { icon: 'file' });
+    const doc = editor.exportDocument();
+    if (!doc.nodes.size) return toast('Nothing to export yet', { icon: 'file' });
     const f = TEXT_FORMATS[format];
-    download(new Blob([this.textOf(format)], { type: 'text/plain' }), `${slug(this.title)}.${f.ext}`);
+    download(new Blob([this.textOf(format, doc)], { type: 'text/plain' }), `${slug(this.title)}.${f.ext}`);
+    if (doc !== editor.doc) toast(`Exported the selection as ${f.name}`, { icon: 'file' });
   }
 
   async copyText(format) {
     try {
-      await navigator.clipboard.writeText(this.textOf(format));
-      toast(`Copied as ${TEXT_FORMATS[format].name}`, { icon: 'copy' });
+      const doc = editor.exportDocument();
+      await navigator.clipboard.writeText(this.textOf(format, doc));
+      toast(`Copied ${doc !== editor.doc ? 'the selection ' : ''}as ${TEXT_FORMATS[format].name}`, { icon: 'copy' });
     } catch (err) {
       toast(`Could not copy: ${err.message}`, { icon: 'x', timeout: 5000 });
     }

@@ -1361,6 +1361,40 @@ export class Editor extends Emitter {
     };
   }
 
+  /**
+   * What an export covers: the selected elements with their contents, selected links with
+   * their ends, and every link among them. Null when nothing is selected: export it all.
+   */
+  exportScope() {
+    const edgeIds = this.selectedEdgeIds();
+    const ends = edgeIds.flatMap((id) => [this.doc.edges.get(id).source, this.doc.edges.get(id).target]);
+    const roots = [...this.selectedNodeIds(), ...ends];
+    if (!roots.length) return null;
+    const nodes = new Set();
+    for (const id of roots) {
+      nodes.add(id);
+      for (const d of this.doc.descendants(id)) nodes.add(d);
+    }
+    const edges = new Set(edgeIds);
+    for (const e of this.doc.edges.values()) if (nodes.has(e.source) && nodes.has(e.target)) edges.add(e.id);
+    return { nodes, edges };
+  }
+
+  /** The document a text export reads: the diagram, or a copy holding just `exportScope()`. */
+  exportDocument() {
+    const scope = this.exportScope();
+    if (!scope) return this.doc;
+    const doc = new DiagramDocument(this.schema);
+    doc.load({
+      nodes: this.doc.order().filter((id) => scope.nodes.has(id)).map((id) => {
+        const n = structuredClone(this.doc.nodes.get(id));
+        return scope.nodes.has(n.parent) ? n : { ...n, parent: null };
+      }),
+      edges: [...scope.edges].map((id) => structuredClone(this.doc.edges.get(id))),
+    });
+    return doc;
+  }
+
   /** Insert a snapshot with fresh ids, offset by (dx, dy). Returns the new top-level ids. */
   insertSnapshot(snap, dx, dy, parentFor = (n) => n.parent) {
     if (this.readOnly) return [];

@@ -174,6 +174,7 @@ Unconnected siblings stack like a rank. Directions are `LR` and `TB`. On a 2,000
 - **Fading:** the dependency focus and a playing flow fade what they leave out; context nodes of a module view are drawn at half strength.
 - **Overlays:** flow step badges and the current step's callout, quarter/third marks while sliding a link end, legends (content from `engine/legend.js`, cached per document version), status badges.
 - **Export:** `exportPNG()` and `exportSVG()` reuse the same scene drawing, without selection or hover decorations.
+  - With a selection, every export covers just that: `editor.exportScope()` gives the selected elements with their contents, selected links with their ends, and the links among them. The renderer draws only those (`only`), and text formats read `editor.exportDocument()`, a scratch copy holding them. With nothing selected, exports cover everything shown.
   - SVG goes through `SVGContext` (`svg-context.js`), a recording, Canvas2D-compatible context that emits paths, text and drop-shadow filters.
   - So the vector output matches the screen, and there is no second drawing implementation to keep in sync.
 

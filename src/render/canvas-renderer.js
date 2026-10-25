@@ -73,6 +73,7 @@ export class CanvasRenderer {
   #wraps = new Map();
   #animating = false;
   #exporting = false;
+  #only = null;
   #bundles = new Map();
   #captions = new Map();
   #labels = new Map();
@@ -167,39 +168,44 @@ export class CanvasRenderer {
       this.#tweens.size > 0 || this.#appear.size > 0 || this.#ghosts.length > 0;
   }
 
-  /** Render the whole diagram to a PNG blob (no selection or hover decorations). */
-  /** Area covering every visible node and link, plus padding. */
-  #exportRect(padding) {
+  /** Area covering every visible node and link (of `only`, if given), plus padding. */
+  #exportRect(padding, only) {
     const { doc, router } = this.ed;
     const hidden = doc.hidden();
-    let b = boundsOf([...doc.nodes.values()].filter((n) => !hidden.has(n.id)));
+    let b = boundsOf([...doc.nodes.values()].filter((n) => !hidden.has(n.id) && (!only || only.nodes.has(n.id))));
     if (!b) return null;
     for (const e of doc.edges.values()) {
-      if (this.ed.edgeShown(e)) b = union(b, router.get(e.id).bbox);
+      if (this.ed.edgeShown(e) && (!only || only.edges.has(e.id))) b = union(b, router.get(e.id).bbox);
     }
     return inflate(b, padding);
   }
 
-  /** Render the whole diagram as a standalone SVG document (vector, same look as the canvas). */
-  exportSVG({ padding = 56 } = {}) {
-    const rect = this.#exportRect(padding);
+  /**
+   * Render the diagram as a standalone SVG document (vector, same look as the canvas).
+   * `only` ({ nodes, edges } id sets, from `editor.exportScope()`) limits it to part of it.
+   */
+  exportSVG({ padding = 56, only = null } = {}) {
+    const rect = this.#exportRect(padding, only);
     if (!rect) return null;
     const ctx = new SVGContext(document.createElement('canvas').getContext('2d'));
     ctx.setTransform(1, 0, 0, 1, -rect.x, -rect.y);
     const saved = this.dpr;
     this.dpr = 1;
     this.#exporting = true;
+    this.#only = only;
     try {
       this.#scene(ctx, rect, 1);
     } finally {
       this.#exporting = false;
+      this.#only = null;
       this.dpr = saved;
     }
     return ctx.toSVG(rect.w, rect.h, this.theme.bg);
   }
 
-  async exportPNG({ scale = 2, padding = 56 } = {}) {
-    const rect = this.#exportRect(padding);
+  /** Render the diagram (or `only` part of it) to a PNG blob (no selection or hover decorations). */
+  async exportPNG({ scale = 2, padding = 56, only = null } = {}) {
+    const rect = this.#exportRect(padding, only);
     if (!rect) return null;
     scale = Math.min(scale, 16000 / rect.w, 16000 / rect.h);
     const c = document.createElement('canvas');
@@ -212,10 +218,12 @@ export class CanvasRenderer {
     const saved = { dpr: this.dpr };
     this.dpr = scale;
     this.#exporting = true;
+    this.#only = only;
     try {
       this.#scene(ctx, rect, 1);
     } finally {
       this.#exporting = false;
+      this.#only = null;
       this.dpr = saved.dpr;
     }
     return new Promise((resolve) => c.toBlob(resolve, 'image/png'));
@@ -307,7 +315,8 @@ export class CanvasRenderer {
     const hidden = doc.hidden();
     const idSet = new Set(doc.index.query(view));
     for (const id of this.#tweens.keys()) if (doc.nodes.has(id)) idSet.add(id);
-    const ids = [...idSet].filter((id) => !hidden.has(id)).sort((a, b) => doc.orderIndex(a) - doc.orderIndex(b));
+    const only = this.#only;
+    const ids = [...idSet].filter((id) => !hidden.has(id) && (!only || only.nodes.has(id))).sort((a, b) => doc.orderIndex(a) - doc.orderIndex(b));
     const containers = [], leaves = [], overlays = [];
     for (const id of ids) {
       const n = doc.nodes.get(id);
@@ -337,7 +346,7 @@ export class CanvasRenderer {
     const visible = [];
     const pairs = new Map();
     for (const e of doc.edges.values()) {
-      if (ed.overlay.connect?.edgeId === e.id) continue;
+      if (ed.overlay.connect?.edgeId === e.id || (only && !only.edges.has(e.id))) continue;
       const sid = doc.visibleAncestor(e.source), tid = doc.visibleAncestor(e.target);
       if ((sid === tid && e.source !== e.target) || hidden.has(sid) || hidden.has(tid)) continue;
       const proxied = sid !== e.source || tid !== e.target;
