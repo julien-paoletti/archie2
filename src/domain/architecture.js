@@ -86,6 +86,11 @@ export const architectureSchema = {
       annotation: true, noPorts: true, hint: 'Lists the kinds of elements and links in use, kept up to date',
     },
   },
+  // Element statuses beyond the default (in use): a badge on the canvas, a legend row, a tag in exports.
+  statuses: {
+    planned: { label: 'Planned', color: '#0284c7' },
+    deprecated: { label: 'Deprecated', color: '#e11d48' },
+  },
   edgeTypes: {
     uses: { label: 'Uses', arrow: 'open' },
     dataflow: { label: 'Data flow', arrow: 'filled', width: 2 },

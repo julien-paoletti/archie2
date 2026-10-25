@@ -4,26 +4,64 @@
  * type's `defaultVariant`. Variant fields (label, color, icon, ...) override the type's.
  */
 export function resolveType(schema, node) {
-  const t = schema.nodeTypes?.[node?.type] ?? {};
-  const v = t.variants?.[node?.data?.variant ?? t.defaultVariant];
+  const t = (has(schema.nodeTypes, node?.type) && schema.nodeTypes[node.type]) || {};
+  const key = node?.data?.variant ?? t.defaultVariant;
+  const v = has(t.variants, key) ? t.variants[key] : null;
   return v ? { ...t, ...v, typeLabel: t.label } : t;
 }
 
 const LIMITS = { items: 50000, id: 200, text: 20000, size: 200000 };
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+const plain = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+const num = (v, d, lo = -LIMITS.size, hi = LIMITS.size) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+const str = (v, max = LIMITS.text) => (typeof v === 'string' ? v.slice(0, max) : v == null ? '' : String(v).slice(0, max));
+const has = (obj, key) => typeof key === 'string' && !!obj && Object.hasOwn(obj, key);
+
+// Field checks: each returns the cleaned value, or undefined to drop the field.
+const text = (max) => (v) => (typeof v === 'string' ? v.slice(0, max) : undefined);
+const oneOf = (...values) => (v) => (values.includes(v) ? v : undefined);
+const color = (v) => (typeof v === 'string' && HEX_COLOR.test(v) ? v : undefined);
+const points = (v) => {
+  const list = Array.isArray(v) ? v.slice(0, 200).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)) : [];
+  return list.length ? list.map((p) => ({ x: num(p.x, 0), y: num(p.y, 0) })) : undefined;
+};
+const NODE_STYLE = {
+  color, textSize: oneOf('sm', 'lg', 'xl'), align: oneOf('center', 'right'), autoWidth: oneOf(false),
+};
+const EDGE_STYLE = {
+  color, routing: oneOf('curved', 'straight'), points, labelT: (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined),
+};
+const EDGE_DATA = { tech: text(500) };
+
+/** Keep only the fields `spec` knows, each checked; everything else is dropped. */
+function fields(o, spec) {
+  const src = plain(o), out = {};
+  for (const [k, check] of Object.entries(spec)) {
+    if (!Object.hasOwn(src, k)) continue;
+    const v = check(src[k]);
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
 
 /**
- * Make diagram JSON from outside (a file, a shared link, storage) safe to load: arrays of
- * plain objects, string ids, finite geometry within bounds, bounded text, known types (unknown
- * ones fall back to the defaults), existing parents without cycles, links between existing
- * elements. Throws on something that isn't a diagram at all; otherwise repairs quietly.
+ * Make diagram JSON from outside (a file, a shared link, storage, the clipboard) safe to load:
+ * arrays of plain objects, string ids, finite geometry within bounds, bounded text, known
+ * types (unknown ones fall back to the defaults), `data` and `style` reduced to known fields
+ * of the right type (colours as #rrggbb), existing parents without cycles, links between
+ * existing elements. Throws on something that isn't a diagram at all; otherwise repairs quietly.
  */
 export function sanitizeDiagram(json, schema) {
   if (!json || typeof json !== 'object' || !Array.isArray(json.nodes)) throw new Error('not an Archie diagram (no elements)');
   if (json.nodes.length > LIMITS.items || (json.edges?.length ?? 0) > LIMITS.items) throw new Error('too many elements');
-  const plain = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
-  const str = (v, max = LIMITS.text) => (typeof v === 'string' ? v.slice(0, max) : v == null ? '' : String(v).slice(0, max));
-  const num = (v, d, lo = -LIMITS.size, hi = LIMITS.size) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
-  const clean = (o) => JSON.parse(JSON.stringify(plain(o), (k, v) => (typeof v === 'string' ? v.slice(0, LIMITS.text) : v)));
+  const nodeData = (t) => ({
+    tech: text(500), description: text(LIMITS.text), stereotype: text(200), owner: text(200),
+    status: (v) => (has(schema.statuses, v) ? v : undefined),
+    variant: (v) => (has(t.variants, v) ? v : undefined),
+    links: (v) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string').slice(0, 50).map((s) => s.slice(0, 2000)) : undefined),
+    borderOnly: oneOf(true),
+  });
   const ids = new Set();
   const nodes = [];
   for (const raw of json.nodes) {
@@ -31,12 +69,12 @@ export function sanitizeDiagram(json, schema) {
     const id = str(raw.id, LIMITS.id);
     if (!id || ids.has(id)) continue;
     ids.add(id);
-    const type = schema.nodeTypes?.[raw.type] ? raw.type : schema.defaultNodeType;
+    const type = has(schema.nodeTypes, raw.type) ? raw.type : schema.defaultNodeType;
     const t = schema.nodeTypes?.[type] ?? {};
     nodes.push({
       id, type, parent: raw.parent == null ? null : str(raw.parent, LIMITS.id),
       x: num(raw.x, 0), y: num(raw.y, 0), w: num(raw.w, t.w ?? 160, 1), h: num(raw.h, t.h ?? 80, 1),
-      label: str(raw.label), data: clean(raw.data), style: clean(raw.style),
+      label: str(raw.label), data: fields(raw.data, nodeData(t)), style: fields(raw.style, NODE_STYLE),
       ...(Number.isFinite(raw.z) ? { z: raw.z } : {}),
       ...(raw.collapsed ? { collapsed: true, expanded: raw.expanded && Number.isFinite(raw.expanded.w) ? { w: num(raw.expanded.w, 160, 1), h: num(raw.expanded.h, 80, 1) } : null } : {}),
     });
@@ -62,8 +100,8 @@ export function sanitizeDiagram(json, schema) {
     if (!id || edgeIds.has(id) || ids.has(id)) continue;
     edgeIds.add(id);
     edges.push({
-      id, type: schema.edgeTypes?.[raw.type] ? raw.type : schema.defaultEdgeType,
-      source: raw.source, target: raw.target, label: str(raw.label), data: clean(raw.data), style: clean(raw.style),
+      id, type: has(schema.edgeTypes, raw.type) ? raw.type : schema.defaultEdgeType,
+      source: raw.source, target: raw.target, label: str(raw.label), data: fields(raw.data, EDGE_DATA), style: fields(raw.style, EDGE_STYLE),
     });
   }
   // Flows: steps over existing links only.

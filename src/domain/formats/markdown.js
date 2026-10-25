@@ -5,8 +5,6 @@ import { describe, exported, kids } from './shared.js';
  * description and links) and one of links. Meant for docs, wikis and pull requests.
  */
 
-const STATUS = { planned: 'Planned', deprecated: 'Deprecated' };
-
 /** A table cell: pipes escaped, line breaks as <br>. */
 const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, '<br>').trim();
 
@@ -17,7 +15,7 @@ export function toMarkdown(doc, { title = 'Architecture' } = {}) {
     for (const n of kids(doc, parentId)) {
       if (n.type === 'note') continue;
       const d = describe(doc, n);
-      rows.push([d.name, d.kind, d.tech, path.join(' › '), n.data?.owner, STATUS[n.data?.status] ?? '', d.description,
+      rows.push([d.name, d.kind, d.tech, path.join(' › '), n.data?.owner, doc.schema.statuses?.[n.data?.status]?.label ?? '', d.description,
         (n.data?.links ?? []).map((l) => `<${l}>`).join(' ')]);
       walk(n.id, [...path, d.name]);
     }

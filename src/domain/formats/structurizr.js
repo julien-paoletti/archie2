@@ -22,7 +22,7 @@ export function toStructurizr(doc, { title = 'Architecture', direction = 'LR' } 
 
   const tagsOf = (n) => {
     const tag = TAGS[n.type];
-    const status = n.data?.status === 'deprecated' ? 'Deprecated' : n.data?.status === 'planned' ? 'Planned' : null;
+    const status = doc.schema.statuses?.[n.data?.status]?.label ?? null;
     return [tag, status].filter(Boolean);
   };
   const props = (n, pad) => {

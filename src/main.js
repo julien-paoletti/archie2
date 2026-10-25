@@ -31,6 +31,8 @@ const TEXT_FORMATS = {
 };
 
 const DOC_KEY = 'archie:document';
+/** The diagram a shared link (or a broken save) replaced, kept until the next replacement. */
+const BACKUP_KEY = 'archie:backup';
 const PREFS_KEY = 'archie:prefs';
 const SETTING_KEYS = ['snapToGrid', 'snapToObjects', 'showGrid', 'layoutDirection'];
 
@@ -145,7 +147,7 @@ class App extends Emitter {
   }
 
   newDiagram() {
-    const json = editor.toJSON();
+    const json = { title: this.title, ...editor.toJSON() };
     editor.load({ nodes: [] }, { fit: false });
     editor.camera.set({ x: -editor.camera.size.w / 2, y: -editor.camera.size.h / 2, zoom: 1 });
     this.setTitle('Untitled architecture', { edit: false });
@@ -303,6 +305,21 @@ class App extends Emitter {
 
   openImport() { importDialog.open(); }
 
+  hasBackup() { return !!read(BACKUP_KEY)?.nodes?.length; }
+
+  /** Bring back the diagram a shared link replaced (the current one becomes the backup). */
+  restoreBackup() {
+    const backup = read(BACKUP_KEY);
+    if (!backup?.nodes?.length) return;
+    write(BACKUP_KEY, { title: this.title, ...editor.toJSON() });
+    try {
+      restore(backup);
+      toast(`Restored ${backup.title || 'your diagram'}`, { icon: 'undo', action: { label: 'Undo', run: () => this.restoreBackup() } });
+    } catch (err) {
+      toast(`Could not restore: ${err.message}`, { icon: 'x', timeout: 6000 });
+    }
+  }
+
   /** A flow as a Mermaid sequence diagram, on the clipboard. */
   async copyFlowSequence(id) {
     try {
@@ -417,6 +434,7 @@ const appCommands = [
   { id: 'file.shareView', title: 'Copy view-only link', group: 'File', readOnly: true, run: () => app.shareLink('view') },
   { id: 'view.present', title: 'Present (read-only)', group: 'View', keys: ['p'], run: () => app.present() },
   { id: 'file.import', title: 'Import from Mermaid…', group: 'File', run: () => app.openImport() },
+  { id: 'file.restoreBackup', title: 'Restore the diagram a link replaced', group: 'File', run: () => app.restoreBackup(), enabled: () => app.hasBackup() },
   { id: 'file.sample', title: 'Load sample architecture', group: 'File', run: () => app.loadSample() },
   { id: 'debug.stress', title: 'Stress test: 2,000 nodes', group: 'File', run: () => app.stressTest() },
 ];
@@ -460,13 +478,26 @@ document.addEventListener('paste', (e) => {
   let clip = null;
   try {
     const data = JSON.parse(text);
-    if (data?.format === 'archie-clip') clip = data;
+    if (data?.format === 'archie-clip') clip = sanitizeClip(data);
   } catch {
-    // Not ours: fall back to the in-app clipboard.
+    // Not ours (or not usable): fall back to the in-app clipboard.
   }
   if (clip) editor.clipboard = editor.clipboard ?? clip;
   editor.paste(clip ?? editor.clipboard);
 });
+
+/**
+ * A clip from the system clipboard may come from anywhere: sanitize it like a file. The
+ * parent of a top-level element (outside the clip) is kept, so pasting next to the originals
+ * still lands in their module; `insertSnapshot` checks that it exists.
+ */
+function sanitizeClip(data) {
+  const clean = sanitizeDiagram(data, architectureSchema);
+  const inClip = new Set(clean.nodes.map((n) => n.id));
+  const parents = new Map(data.nodes.filter((n) => typeof n?.parent === 'string' && !inClip.has(n.parent)).map((n) => [n.id, n.parent.slice(0, 200)]));
+  for (const n of clean.nodes) if (n.parent == null && parents.has(n.id)) n.parent = parents.get(n.id);
+  return { format: 'archie-clip', nodes: clean.nodes, edges: clean.edges };
+}
 
 // ── Drag & drop: shapes from the dock, JSON files from the desktop.
 stage.addEventListener('dragover', (e) => {
@@ -525,10 +556,12 @@ function restore(raw) {
  */
 function keepAsOwn(message) {
   const previous = read(DOC_KEY);
+  // Keep the replaced diagram in its own slot: restorable from the menu, not only from the toast.
+  if (previous?.nodes?.length) write(BACKUP_KEY, previous);
   app.bindFile(null);
   scheduleSave();
   if (previous?.nodes?.length) {
-    toast(message, { icon: 'link', timeout: 8000, action: { label: 'Restore yours', run: () => restore(previous) } });
+    toast(message, { icon: 'link', timeout: 12000, action: { label: 'Restore yours', run: () => app.restoreBackup() } });
   } else {
     toast(message, { icon: 'link' });
   }
@@ -563,13 +596,17 @@ function slug(s) {
 /** The diagram kept in this browser, else the sample. */
 function openSaved() {
   const saved = read(DOC_KEY);
+  if (!saved?.nodes?.length) return app.loadSample();
   try {
-    if (!saved?.nodes?.length) throw new Error('nothing saved');
     restore(saved);
     // Re-bind the file this diagram was saved to (permission is asked again on the next Save).
     if (files.supported) files.recallHandle().then((h) => h && app.bindFile(h, { dirty: !!saved.fileDirty }));
-  } catch {
+  } catch (err) {
+    // Never let the sample silently overwrite it: keep the saved copy aside and say so.
+    console.error('Could not open the saved diagram', err);
+    write(BACKUP_KEY, saved);
     app.loadSample();
+    toast(`Your saved diagram could not be opened (${err.message}). A copy is kept: menu → Restore.`, { icon: 'x', timeout: 10000 });
   }
 }
 

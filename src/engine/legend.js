@@ -7,7 +7,7 @@ import { boundariesCrossed, isOverlay, resolveType } from './schema.js';
  *   { kind: 'boundary', label, color, dashed }          boundary kinds
  *   { kind: 'edge', label, dash, arrow, width }         link kinds
  *   { kind: 'marker', label, color }                    trust boundary crossings
- *   { kind: 'status', label, status }                   planned / deprecated badges
+ *   { kind: 'status', label, status, color }            status badges in use (schema.statuses)
  */
 export const LEGEND = { width: 240, header: 40, section: 26, row: 24, pad: 12 };
 
@@ -48,7 +48,7 @@ export function legendEntries(doc) {
     { title: 'Links', entries: [...edges.values()] },
     { title: 'Markers', entries: [
       ...(crossings ? [crossings] : []),
-      ...['planned', 'deprecated'].filter((s) => statuses.has(s)).map((s) => ({ kind: 'status', status: s, label: s === 'planned' ? 'Planned' : 'Deprecated' })),
+      ...Object.entries(schema.statuses ?? {}).filter(([s]) => statuses.has(s)).map(([status, s]) => ({ kind: 'status', status, label: s.label, color: s.color })),
     ] },
   ];
   return sections.filter((s) => s.entries.length);

@@ -3,7 +3,6 @@ import { h, svg, ui } from './dom.js';
 import { linkName, safeUrl } from './links.js';
 
 const DELAY = 550;
-const STATUS = { planned: 'Planned', deprecated: 'Deprecated' };
 
 /** Does a node have details worth a card (beyond the name and caption already drawn)? */
 const hasDetails = (n) => !!(n?.data?.description || n?.data?.owner || n?.data?.status || n?.data?.links?.length);
@@ -31,13 +30,14 @@ export function createHoverCard(editor, root, { icons }) {
     const t = resolveType(editor.schema, n);
     const d = n.data ?? {};
     const color = n.style?.color ?? t.color;
+    const status = editor.schema.statuses?.[d.status];
     card.replaceChildren(
       h('div', { class: 'hc-head' },
         h('span', { class: 'chip sm', style: { '--c': color } }, svg(icons[t.icon], { size: 13 })),
         h('div', { class: 'hc-title' },
           h('strong', {}, n.label || t.label),
           h('span', {}, [d.stereotype || t.label, d.tech].filter(Boolean).join(' · '))),
-        STATUS[d.status] ? h('span', { class: 'hc-status ' + d.status }, STATUS[d.status]) : null),
+        status ? h('span', { class: 'hc-status', style: { background: status.color } }, status.label) : null),
       d.description ? h('p', { class: 'hc-desc' }, d.description) : null,
       d.owner ? h('div', { class: 'hc-row' }, svg(ui.user, { size: 13 }), h('span', {}, d.owner)) : null,
       ...(d.links ?? []).map((raw) => {

@@ -55,3 +55,37 @@ test('sanitizeDiagram repairs what it can and refuses what is not a diagram', ()
   assert.equal(parents.d, null, 'missing parent dropped');
   assert.deepEqual(out.edges.map((e) => [e.id, e.type]), [['e1', 'uses']], 'dangling and id-clashing links dropped');
 });
+
+test('sanitizeDiagram keeps only known data and style fields, with the right types', () => {
+  const out = sanitizeDiagram({
+    nodes: [
+      { id: 'a', type: 'constructor' },
+      {
+        id: 'b', type: 'boundary',
+        data: { variant: '__proto__', status: 'toString', stereotype: 5, links: 'x', tech: 'Go', borderOnly: 'yes', junk: { deep: 1 } },
+        style: { color: 'url(https://evil.example/p)', textSize: 'huge', align: 'center' },
+      },
+      {
+        id: 'c', type: 'boundary',
+        data: { variant: 'network', status: 'planned', links: ['ok.io', 3, 'b.io'], borderOnly: true },
+        style: { color: '#22C55E' },
+      },
+    ],
+    edges: [
+      { id: 'e', source: 'b', target: 'c', type: 'hasOwnProperty', data: { tech: 7 },
+        style: { color: 1, routing: 'curved', labelT: 3, points: [{ x: 1, y: 2 }, { x: 'a', y: 0 }, null] } },
+      { id: 'f', source: 'b', target: 'c', style: { color: '#fff', points: [], routing: 'zigzag' } },
+    ],
+  }, architectureSchema);
+  const [a, b, c] = out.nodes;
+  assert.equal(a.type, 'component', 'inherited names are not types');
+  assert.deepEqual(b.data, { tech: 'Go' });
+  assert.deepEqual(b.style, { align: 'center' }, 'a url() colour is dropped (it could leak who opened the link)');
+  assert.deepEqual(c.data, { variant: 'network', status: 'planned', links: ['ok.io', 'b.io'], borderOnly: true });
+  assert.deepEqual(c.style, { color: '#22C55E' });
+  const [e, f] = out.edges;
+  assert.equal(e.type, 'uses');
+  assert.deepEqual(e.data, {});
+  assert.deepEqual(e.style, { routing: 'curved', labelT: 1, points: [{ x: 1, y: 2 }] });
+  assert.deepEqual(f.style, {}, 'short hex, empty points and unknown routing dropped');
+});

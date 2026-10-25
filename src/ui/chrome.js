@@ -61,10 +61,12 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
       ['link', 'Copy view-only link', () => app.shareLink('view')],
       ['present', 'Present', () => app.present(true), 'p'],
       null,
+      app.hasBackup() && ['undo', 'Restore the diagram a link replaced', () => app.restoreBackup()],
       ['sparkles', 'Load sample architecture', () => app.loadSample()],
       ['zap', 'Stress test (2,000 nodes)', () => app.stressTest()],
     ];
-    popover(anchor, items, 'below');
+    // `null` is a separator: drop entries that don't apply (false) before handing over.
+    popover(anchor, items.filter((it) => it !== false), 'below');
   };
 
   const undo = iconButton('undo', tip('Undo', 'edit.undo', editor), () => editor.undo());

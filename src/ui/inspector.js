@@ -6,8 +6,6 @@ import { linkName, safeUrl, splitLinks } from './links.js';
 
 let focusSeq = 0;
 
-/** Element status: [value, label]; '' is the default (in use, no badge). */
-const STATUSES = [['', 'In use'], ['planned', 'Planned'], ['deprecated', 'Deprecated']];
 
 /**
  * Right-hand inspector. Rebuilt on selection change; fields are refreshed in place on
@@ -190,7 +188,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
       ),
       section('Details',
         row('Owner', text(() => get()?.data?.owner, (v, s) => editor.setData(n.id, 'owner', v, s), { placeholder: 'Team or person', suggestions: owners() })),
-        row('Status', segmented(STATUSES.map(([k, label]) => [k, label]), () => get()?.data?.status ?? '', (v) => editor.setData(n.id, 'status', v || null))),
+        row('Status', segmented([['', 'In use'], ...Object.entries(editor.schema.statuses ?? {}).map(([k, s]) => [k, s.label])], () => get()?.data?.status ?? '', (v) => editor.setData(n.id, 'status', v || null))),
         row('Links', text(() => (get()?.data?.links ?? []).join('\n'), (v, s) => editor.setData(n.id, 'links', splitLinks(v), s), { placeholder: 'Docs, repo… one URL per line', multiline: true })),
         linkChips(() => get()?.data?.links),
       ),

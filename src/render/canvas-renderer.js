@@ -15,10 +15,6 @@ export const TEXT_SIZES = {
   xl: { size: 26, lh: 32, weight: 700 },
 };
 export const TEXT_PAD = 4;
-const STATUS_BADGES = {
-  planned: { label: 'PLANNED', color: '#0284c7' },
-  deprecated: { label: 'DEPRECATED', color: '#e11d48' },
-};
 const GEOM = ['x', 'y', 'w', 'h'];
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 const easeOutBack = (t) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
@@ -506,12 +502,13 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
-  /** "Planned" / "Deprecated" pill sitting on the top border, near the right (`inset` clears a header button). */
+  /** Status pill ("PLANNED", from `schema.statuses`) on the top border, near the right (`inset` clears a header button). */
   #statusBadge(ctx, n, r, inset = 14) {
-    const s = STATUS_BADGES[n.data?.status];
+    const s = this.schema.statuses?.[n.data?.status];
     if (!s || this.lod < 2) return;
+    const label = s.label.toUpperCase();
     ctx.font = `700 9px ${FONT}`;
-    const w = this.#measureText(ctx, s.label) + 12, h = 15;
+    const w = this.#measureText(ctx, label) + 12, h = 15;
     const x = r.x + r.w - inset - w, y = r.y - h / 2;
     if (x < r.x + 8) return;
     ctx.beginPath();
@@ -524,7 +521,7 @@ export class CanvasRenderer {
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(s.label, x + w / 2, y + h / 2 + 0.5);
+    ctx.fillText(label, x + w / 2, y + h / 2 + 0.5);
   }
 
   /**
@@ -1070,7 +1067,7 @@ export class CanvasRenderer {
     } else if (e.kind === 'status') {
       ctx.beginPath();
       ctx.roundRect(x, cy - 5, 24, 10, 5);
-      ctx.fillStyle = STATUS_BADGES[e.status].color;
+      ctx.fillStyle = e.color;
       ctx.fill();
     }
     ctx.restore();
