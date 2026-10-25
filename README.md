@@ -34,6 +34,7 @@ You can also host it from any static server. It has no build step and no depende
 - **Collapsible modules:** click a module's chevron or press <kbd>C</kbd>. Links re-attach to the collapsed card, and neighbours shift to make room.
 - **Editing:** full undo/redo (a whole gesture is one step), copy/paste across tabs, copy and paste style (<kbd>Ctrl/⌘ Alt C</kbd> / <kbd>V</kbd>), grouping, align and distribute, inspector, command palette (<kbd>Ctrl/⌘ K</kbd>), context menus, help sheet (<kbd>?</kbd>).
 - **Polish:** light and dark themes, eased hover and selection states, drop-target highlights, appear and disappear animations, and flow animation on focused links.
+- **Templates:** start from a web application, an event-driven system, a Kubernetes deployment or a system context (menu → New from template…).
 - **Files:** in Chrome and Edge, <kbd>Ctrl/⌘ S</kbd> saves back into the file you opened or saved (File System Access API) instead of downloading a new copy; <kbd>Ctrl/⌘ Shift S</kbd> is Save as. A dot next to the title shows unsaved changes, and the file is remembered across reloads. Other browsers download the JSON. Everything also autosaves to `localStorage`, and you can export PNG or SVG.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the engine works.
