@@ -77,6 +77,9 @@ export const ui = {
   collapse: 'M4 14h6v6 M20 10h-6V4 M14 10l7-7 M3 21l7-7',
   expand: 'M15 3h6v6 M9 21H3v-6 M21 3l-7 7 M3 21l7-7',
   keyboard: 'M2 6h20v12H2z M6 10h.01 M10 10h.01 M14 10h.01 M18 10h.01 M7 14h10',
+  check: 'M20 6 9 17l-5-5',
+  warning: 'M12 3 2 20h20z M12 10v4 M12 17h.01',
+  info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 16v-4 M12 8h.01',
   user: 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 3.6-7 8-7s8 3 8 7',
   external: 'M14 4h6v6 M20 4l-9 9 M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   brush: 'M18.4 2.6a2 2 0 0 1 2.9 2.9L12 14.8 9.2 12z M9.2 12c-2.4 0-4.2 1.8-4.2 4.2 0 1.6-1 2.6-2 2.8 1 1.2 2.6 2 4.6 2 3 0 5.4-2.3 5.4-5.4',
@@ -107,9 +110,9 @@ export function isEditable(el) {
   return !!el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
 }
 
-/** Close a popover when clicking outside of it or pressing Escape. */
-export function dismissable(el, close) {
-  const onDown = (e) => { if (!el.contains(e.target)) close(); };
+/** Close a popover when clicking outside of it (and of `ignore`, e.g. its toggle button) or pressing Escape. */
+export function dismissable(el, close, ignore = []) {
+  const onDown = (e) => { if (![el, ...ignore].some((x) => x.contains(e.target))) close(); };
   const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
   setTimeout(() => {
     document.addEventListener('pointerdown', onDown, true);

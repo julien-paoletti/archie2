@@ -95,7 +95,8 @@ export function sampleDiagram() {
   const nodes = [];
   const edges = [];
   const n = (id, type, label, parent = null, tech = '') => nodes.push({ id, type, label, parent, data: tech ? { tech } : {} });
-  const e = (source, target, type = 'uses', label = '') => edges.push({ id: `e_${source}_${target}`, type, source, target, label });
+  const e = (source, target, type = 'uses', label = '', tech = '') =>
+    edges.push({ id: `e_${source}_${target}`, type, source, target, label, data: tech ? { tech } : {} });
 
   n('customer', 'actor', 'Customer');
   n('experience', 'module', 'Experience');
@@ -122,8 +123,8 @@ export function sampleDiagram() {
   e('mobile', 'gateway', 'uses', 'HTTPS');
   e('gateway', 'orders');
   e('gateway', 'catalog');
-  e('orders', 'payments');
-  e('payments', 'stripe', 'dataflow', 'charges');
+  e('orders', 'payments', 'uses', '', 'gRPC');
+  e('payments', 'stripe', 'dataflow', 'charges', 'HTTPS');
   e('orders', 'ordersdb', 'dataflow');
   e('catalog', 'search', 'dataflow');
   e('orders', 'bus', 'async', 'OrderPlaced');

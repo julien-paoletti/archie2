@@ -18,9 +18,10 @@ export function isOverlay(doc, node) {
 /**
  * Boundaries an edge crosses: boundaries holding exactly one of its two ends. Containing
  * boundaries are checked through the tree (any nesting depth); border-only outlines by
- * geometry (the visible end's center inside the outline).
+ * geometry (the visible end's center inside the outline). Callers checking many edges pass
+ * the `overlays` (border-only outlines) once instead of having every call scan all nodes.
  */
-export function boundariesCrossed(doc, edge) {
+export function boundariesCrossed(doc, edge, overlays = null) {
   const chain = (id) => new Set([id, ...doc.ancestors(id)]);
   const a = chain(edge.source), b = chain(edge.target);
   const out = [];
@@ -32,7 +33,7 @@ export function boundariesCrossed(doc, edge) {
   }
   const ends = [edge.source, edge.target].map((id) => doc.nodes.get(doc.visibleAncestor(id))).filter(Boolean);
   if (ends.length === 2) {
-    for (const o of doc.nodes.values()) {
+    for (const o of overlays ?? doc.nodes.values()) {
       if (!isOverlay(doc, o) || ends.some((e) => e.id === o.id)) continue;
       const inside = ends.map((e) => {
         const c = { x: e.x + e.w / 2, y: e.y + e.h / 2 };

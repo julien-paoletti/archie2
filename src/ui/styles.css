@@ -382,6 +382,37 @@ kbd {
 .hc-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hc-row .ico { color: var(--subtle); }
 
+/* ───────────────────────────── checks */
+.checks-btn .badge {
+  position: absolute; top: 3px; right: 2px; min-width: 15px; height: 15px; padding: 0 4px;
+  border-radius: 8px; background: #f59e0b; color: #fff; font-size: 10px; font-weight: 700; line-height: 15px;
+}
+.checks-btn .badge:empty { display: none; }
+.checks {
+  position: fixed; z-index: 55; width: 340px; max-height: min(70vh, 640px); overflow: auto; padding: 6px 0 8px;
+  background: var(--panel-solid); box-shadow: var(--shadow-lg); scrollbar-width: thin;
+  opacity: 0; transform: translateY(-4px) scale(0.98); transform-origin: top right; pointer-events: none;
+  transition: opacity 0.14s var(--ease), transform 0.18s var(--ease);
+}
+.checks.open { opacity: 1; transform: none; pointer-events: auto; }
+.checks-head { display: flex; align-items: baseline; justify-content: space-between; padding: 8px 14px 4px; }
+.checks-head strong { font-size: 14px; }
+.checks-head span { color: var(--muted); font-size: 12px; }
+.checks section { padding: 6px 8px 2px; }
+.checks h3 { display: flex; justify-content: space-between; margin: 4px 6px 4px; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.checks h3 span { color: var(--subtle); }
+.checks .small { padding: 2px 8px; }
+.check-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 4px 8px;
+  border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left;
+}
+.check-item:hover { background: var(--hover); }
+.check-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.check-item.warning .ico { color: #f59e0b; }
+.check-item.info .ico { color: var(--subtle); }
+.checks-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px; color: var(--muted); }
+.checks-empty .ico { color: #22c55e; }
+
 /* ───────────────────────────── menus */
 .menu {
   position: fixed; z-index: 60; min-width: 230px; padding: 5px;

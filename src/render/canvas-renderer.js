@@ -622,8 +622,10 @@ export class CanvasRenderer {
     if (!marking.size) return;
     const { theme: th, z } = this;
     const s = 6;
+    // Only outlines in view can carry markers: don't let every link scan the whole document.
+    const outlines = containers.map(([n]) => n).filter((n) => isOverlay(this.ed.doc, n));
     for (const [e, route] of routed) {
-      for (const b of boundariesCrossed(this.ed.doc, e)) {
+      for (const b of boundariesCrossed(this.ed.doc, e, outlines)) {
         const m = marking.get(b.id);
         if (!m) continue;
         for (const p of borderCrossings(route.poly, m.r)) {

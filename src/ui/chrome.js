@@ -12,8 +12,8 @@ function iconButton(icon, label, onclick, extra = {}) {
   return h('button', { class: 'btn', type: 'button', 'aria-label': label, 'data-tip': label, onclick, ...extra }, svg(ui[icon]));
 }
 
-/** Top bar: document identity + file menu, main tools, view toggles. */
-export function createTopBar(editor, app, root) {
+/** Top bar: document identity + file menu, main tools, view toggles (`extras` go before them). */
+export function createTopBar(editor, app, root, { extras = [] } = {}) {
   const title = h('input', {
     class: 'doc-title', value: app.title, spellcheck: 'false', 'aria-label': 'Diagram title',
     oninput: (e) => app.setTitle(e.target.value),
@@ -79,7 +79,7 @@ export function createTopBar(editor, app, root) {
   const theme = iconButton('moon', 'Toggle theme', () => app.toggleTheme());
   const inspector = iconButton('panel', 'Inspector  ·  I', () => app.toggleInspector());
   const help = iconButton('help', 'Shortcuts  ·  ?', () => app.openHelp());
-  const right = h('div', { class: 'panel toolbar' }, search, h('i', { class: 'sep' }), theme, inspector, help);
+  const right = h('div', { class: 'panel toolbar' }, search, h('i', { class: 'sep' }), ...extras, theme, inspector, help);
 
   root.append(h('div', { class: 'topbar' }, brand, tools, right));
 
