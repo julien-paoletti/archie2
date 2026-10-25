@@ -8,7 +8,7 @@ import { describe, exported, identifiers, isGroup, kids } from './shared.js';
  */
 
 const LEAF = {
-  actor: 'actor', database: 'database', queue: 'queue', external: 'cloud', client: 'component',
+  actor: 'actor', database: 'database', queue: 'queue', external: 'cloud', cli: 'component',
   service: 'component', component: 'component', application: 'component', firewall: 'rectangle',
   network: 'rectangle', note: 'note', document: 'file', server: 'node', vm: 'node', container: 'node',
 };

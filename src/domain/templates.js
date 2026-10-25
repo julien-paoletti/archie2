@@ -25,7 +25,7 @@ export const templates = [
       n('cdn', 'external', 'CDN', null, 'Static assets');
       n('vpc', 'boundary', 'Production', null, '10.0.0.0/16', { variant: 'network' });
       n('app', 'module', 'Web application', 'vpc');
-      n('spa', 'client', 'Web app', 'app', 'React', { stereotype: 'Frontend' });
+      n('spa', 'application', 'Web app', 'app', 'React', { stereotype: 'Frontend' });
       n('api', 'service', 'API', 'app', 'Node.js', { stereotype: 'Backend' });
       n('worker', 'component', 'Background jobs', 'app', 'Node.js');
       n('data', 'module', 'Data', 'vpc');
@@ -54,7 +54,7 @@ export const templates = [
     icon: 'queue',
     build() {
       const { nodes, edges, n, e } = model();
-      n('client', 'client', 'Clients', null, 'Web · Mobile');
+      n('client', 'application', 'Clients', null, 'Web · Mobile');
       n('producers', 'module', 'Commands');
       n('orders', 'service', 'Orders', 'producers', 'Java');
       n('payments', 'service', 'Payments', 'producers', 'Go');

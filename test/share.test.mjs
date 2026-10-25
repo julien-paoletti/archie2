@@ -56,6 +56,11 @@ test('sanitizeDiagram repairs what it can and refuses what is not a diagram', ()
   assert.deepEqual(out.edges.map((e) => [e.id, e.type]), [['e1', 'uses']], 'dangling and id-clashing links dropped');
 });
 
+test('sanitizeDiagram loads retired types as their successor', () => {
+  const out = sanitizeDiagram({ nodes: [{ id: 'web', type: 'client', label: 'Web', data: { tech: 'React' } }] }, architectureSchema);
+  assert.deepEqual([out.nodes[0].type, out.nodes[0].data], ['application', { tech: 'React' }], 'a Client is now an Application');
+});
+
 test('sanitizeDiagram keeps only known data and style fields, with the right types', () => {
   const out = sanitizeDiagram({
     nodes: [

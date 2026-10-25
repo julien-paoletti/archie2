@@ -13,7 +13,7 @@ test('checks: boundary crossings, orphans, duplicates, default names, empty modu
   doc.addNode({ id: 'api', type: 'service', label: 'API' });
   doc.addNode({ id: 'api2', type: 'service', label: 'api' });
   doc.addNode({ id: 'api3', type: 'service', label: 'API' });
-  doc.addNode({ id: 'web', type: 'client', label: 'Web' });
+  doc.addNode({ id: 'web', type: 'application', label: 'Web' });
   doc.addNode({ id: 'new', type: 'component', label: 'Component' });
   doc.addNode({ id: 'box', type: 'module', label: 'Later' });
   doc.addNode({ id: 'host', type: 'server', label: 'Host 1' });

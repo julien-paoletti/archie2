@@ -17,7 +17,7 @@ export const icons = {
   database: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
   queue: 'M3 7h18v10H3z M8 7v10 M13 7v10 M18 7v10',
   document: 'M5 3h14v15.5c-2.3-1.6-4.7-1.6-7 0s-4.7 1.6-7 0z M8.5 8h7 M8.5 12h4.5',
-  client: 'M3 4h18v12H3z M8 20h8 M12 16v4',
+  cli: 'M4 17l6-6-6-6 M12 19h8',
   external: 'M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18z',
   actor: 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 3.6-7 8-7s8 3 8 7',
   note: 'M5 3h10l4 4v14H5z M14 3v5h5 M8 12h8 M8 16h6',
@@ -50,6 +50,7 @@ export const architectureSchema = {
     },
     component: { label: 'Component', w: 200, h: 72, color: '#3b82f6', icon: 'component', shortcut: '2', dock: 'software', hint: 'A building block' },
     application: { label: 'Application', w: 200, h: 72, color: '#c026d3', icon: 'application', dock: 'software', hint: 'A program users or systems run' },
+    cli: { label: 'CLI', w: 200, h: 72, color: '#8b5cf6', icon: 'cli', shortcut: '6', dock: 'software', hint: 'A command-line tool', techPlaceholder: 'e.g. Go · Cobra, Python · Click' },
     service: { label: 'Service', w: 200, h: 72, color: '#14b8a6', icon: 'service', shortcut: '3', dock: 'software', hint: 'A deployable unit' },
     database: { label: 'Database', w: 160, h: 96, color: '#f59e0b', icon: 'database', shape: 'cylinder', shortcut: '4', dock: 'software', hint: 'Persistent storage' },
     document: {
@@ -57,7 +58,6 @@ export const architectureSchema = {
       hint: 'A file, report or dataset', techLabel: 'Format', techPlaceholder: 'e.g. PDF, CSV, Parquet on S3',
     },
     queue: { label: 'Queue', w: 200, h: 64, color: '#ec4899', icon: 'queue', shortcut: '5', dock: 'software', hint: 'Broker, topic, stream' },
-    client: { label: 'Client', w: 200, h: 72, color: '#8b5cf6', icon: 'client', shortcut: '6', dock: 'software', hint: 'Web, mobile, CLI' },
     server: {
       label: 'Server', container: true, host: true, w: 200, h: 72, color: '#f97316', icon: 'server', dock: 'infrastructure',
       hint: 'Physical or bare-metal host', techLabel: 'Specs', techPlaceholder: 'e.g. 32 vCPU · 128 GB, Ubuntu 24.04',
@@ -91,6 +91,8 @@ export const architectureSchema = {
       annotation: true, noPorts: true, hint: 'Lists the kinds of elements and links in use, kept up to date',
     },
   },
+  // Types that no longer exist, and what saved diagrams load them as.
+  retiredTypes: { client: 'application' },
   // Element statuses beyond the default (in use): a badge on the canvas, a legend row, a tag in exports.
   statuses: {
     planned: { label: 'Planned', color: '#0284c7' },
@@ -115,8 +117,8 @@ export function sampleDiagram() {
 
   n('customer', 'actor', 'Customer');
   n('experience', 'module', 'Experience');
-  n('web', 'client', 'Web Storefront', 'experience', 'Next.js');
-  n('mobile', 'client', 'Mobile App', 'experience', 'Swift · Kotlin');
+  n('web', 'application', 'Web Storefront', 'experience', 'Next.js');
+  n('mobile', 'application', 'Mobile App', 'experience', 'Swift · Kotlin');
   nodes.push({ id: 'vpc', type: 'boundary', label: 'Production VPC', data: { variant: 'network', tech: '10.0.0.0/16' } });
   n('platform', 'module', 'Commerce Platform', 'vpc');
   n('gateway', 'service', 'API Gateway', 'platform', 'Envoy');

@@ -9,7 +9,7 @@ import { describe, identifiers, isGroup, kids } from './shared.js';
  * Views: a system landscape plus a container view per software system with contents.
  */
 
-const TAGS = { database: 'Database', document: 'Document', queue: 'Queue', external: 'External', actor: 'Person', client: 'Client' };
+const TAGS = { database: 'Database', document: 'Document', queue: 'Queue', external: 'External', actor: 'Person', cli: 'CLI' };
 
 /** A string in the DSL: double quotes and backslashes escaped, one line. */
 const s = (v) => `"${String(v ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ')}"`;

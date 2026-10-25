@@ -590,7 +590,7 @@ test('firewall: dropped onto a link it is put in its path, in one undo step', as
   const { architectureSchema } = await import('../src/domain/architecture.js');
   const ed = new Editor({ schema: architectureSchema });
   ed.resize(1600, 1000);
-  ed.doc.addNode({ id: 'web', type: 'client', x: 0, y: 0 });
+  ed.doc.addNode({ id: 'web', type: 'application', x: 0, y: 0 });
   ed.doc.addNode({ id: 'api', type: 'service', x: 600, y: 0 });
   ed.doc.addEdge({ id: 'e', source: 'web', target: 'api', label: 'calls', data: { tech: 'HTTPS' } });
   ed.router.get('e');

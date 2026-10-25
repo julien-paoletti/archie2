@@ -25,6 +25,7 @@ You can also host it from any static server. It has no build step and no runtime
 - **Deployment modeling:** Server, Virtual machine and Container start as compact cards. Drop an element onto one and it becomes a box hosting it, so Server → VM → Container → Application takes three drags.
 - **Free text:** press <kbd>T</kbd> (or use the dock) to put plain text anywhere: no box, sizes S to Title, alignment and colour. Auto layout leaves it where you put it.
 - **Legend:** drop a Legend from the dock: it lists the kinds of elements (by type label), boundaries and links the diagram uses, plus crossing markers and status badges, and keeps itself up to date. It exports with the diagram.
+- **Applications and CLIs:** an Application element for web, mobile and desktop apps, and a CLI element (the `>_` prompt, <kbd>6</kbd>) for command-line tools. Diagrams saved with the old Client element open with Applications in its place.
 - **Documents:** a Document element (the wavy-bottomed file shape) for files, reports and datasets, with their format (PDF, CSV…) under the name. It exports as a PlantUML `file`.
 - **Firewalls:** drop a Firewall onto a link (from the dock or by dragging) to put it in the path: A → B becomes A → Firewall → B.
 - **Shared networks:** a Network bus element that components attach to from anywhere, even from different modules. Attachments drop straight onto the bus, and <kbd>F</kbd> stretches the bus to span its members.

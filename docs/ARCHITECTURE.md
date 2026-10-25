@@ -185,8 +185,11 @@ Unconnected siblings stack like a rank. Directions are `LR` and `TB`. On a 2,000
   groupType: 'module', defaultNodeType: 'component', defaultEdgeType: 'uses',
   nodeTypes: { module: { label, container: true, w, h, color, icon, shortcut }, database: { shape: 'cylinder', ... }, ... },
   edgeTypes: { uses: { arrow: 'open' }, async: { arrow: 'filled', dash: [7, 5] }, ... },
+  retiredTypes: { client: 'application' },
 }
 ```
+
+`retiredTypes` maps a removed type to the one that replaces it, so `sanitizeDiagram` loads old diagrams without falling back to the default type.
 
 Types can declare `variants`, selected by `node.data.variant` (default: `defaultVariant`). `resolveType(schema, node)` in `engine/schema.js` merges a variant's label, color and icon over its type.
 

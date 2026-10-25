@@ -51,7 +51,7 @@ function fields(o, spec) {
 /**
  * Make diagram JSON from outside (a file, a shared link, storage, the clipboard) safe to load:
  * arrays of plain objects, string ids, finite geometry within bounds, bounded text, known
- * types (unknown ones fall back to the defaults), `data` and `style` reduced to known fields
+ * types (retired ones become their successor, unknown ones fall back to the defaults), `data` and `style` reduced to known fields
  * of the right type (colours as #rrggbb), existing parents without cycles, links between
  * existing elements. Throws on something that isn't a diagram at all; otherwise repairs quietly.
  */
@@ -72,7 +72,7 @@ export function sanitizeDiagram(json, schema) {
     const id = str(raw.id, LIMITS.id);
     if (!id || ids.has(id)) continue;
     ids.add(id);
-    const type = has(schema.nodeTypes, raw.type) ? raw.type : schema.defaultNodeType;
+    const type = has(schema.nodeTypes, raw.type) ? raw.type : has(schema.retiredTypes, raw.type) ? schema.retiredTypes[raw.type] : schema.defaultNodeType;
     const t = schema.nodeTypes?.[type] ?? {};
     nodes.push({
       id, type, parent: raw.parent == null ? null : str(raw.parent, LIMITS.id),

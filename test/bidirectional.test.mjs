@@ -14,7 +14,7 @@ import { toMarkdown } from '../src/domain/formats/markdown.js';
 /** api ↔ cache (both ways), web → api, api → db. */
 function doc() {
   const d = new DiagramDocument(architectureSchema);
-  d.addNode({ id: 'web', type: 'client', label: 'Web' });
+  d.addNode({ id: 'web', type: 'application', label: 'Web' });
   d.addNode({ id: 'api', type: 'service', label: 'API' });
   d.addNode({ id: 'cache', type: 'database', label: 'Cache' });
   d.addNode({ id: 'db', type: 'database', label: 'DB' });
