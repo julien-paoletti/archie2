@@ -5,9 +5,10 @@ A fast architecture-diagram editor that runs entirely in the browser. You model 
 ```sh
 npm start      # http://localhost:5173  (zero-dependency static server)
 npm test       # engine unit tests (node --test)
+npm run shot -- tools/shots/sample.mjs   # screenshots of the app (needs Chrome or Edge, and npm install)
 ```
 
-You can also host it from any static server. It has no build step and no dependencies.
+You can also host it from any static server. It has no build step and no runtime dependencies (playwright-core is only for the screenshot tool).
 
 ## Highlights
 
