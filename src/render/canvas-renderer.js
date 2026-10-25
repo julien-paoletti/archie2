@@ -82,6 +82,8 @@ export class CanvasRenderer {
   #focus = null;
   /** Link tag places: edge id → { route, p, rect } (see #placeTags). */
   #tagMemo = new Map();
+  /** Module header text as last drawn: node id → rect (links are not drawn over it). */
+  #headers = new Map();
   #lastLegend = null;
 
   constructor(editor, canvas, { theme, icons = {} }) {
@@ -228,7 +230,7 @@ export class CanvasRenderer {
       this.#tweens.clear();
       this.#appear.clear();
       this.#ghosts = [];
-      for (const map of [this.#captions, this.#labels, this.#tabs]) map.clear();
+      for (const map of [this.#captions, this.#labels, this.#tabs, this.#headers]) map.clear();
       this.invalidate();
       return;
     }
@@ -238,7 +240,7 @@ export class CanvasRenderer {
     for (const op of patch.ops) {
       if (op.k === 'flow') continue;
       // What was last drawn for a deleted item is no use any more.
-      if (op.t === 'del') for (const map of [this.#captions, this.#labels, this.#tabs]) map.delete(op.id);
+      if (op.t === 'del') for (const map of [this.#captions, this.#labels, this.#tabs, this.#headers]) map.delete(op.id);
       if (op.k === 'edge') {
         if (op.t === 'add' && few) this.#appear.set(op.id, now);
         continue;
@@ -328,6 +330,7 @@ export class CanvasRenderer {
     this.stats.nodes = ids.length;
 
     for (const [n, r] of containers) this.#drawContainer(ctx, n, r);
+    const holes = this.lod > 0 ? this.#labelHoles(containers) : [];
 
     // Links into collapsed modules attach to the module; links between the same pair of
     // visible nodes are drawn once and labelled with their count.
@@ -369,9 +372,18 @@ export class CanvasRenderer {
     if (this.lod === 0) {
       this.#overviewBatch(ctx, routed, leaves);
     } else {
+      // Links pass behind module titles and boundary tabs instead of crossing their text.
+      if (holes.length) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(view.x, view.y, view.w, view.h);
+        for (const h of holes) ctx.rect(h.x, h.y, h.w, h.h);
+        ctx.clip('evenodd');
+      }
       for (const [e, route] of routed) this.#drawEdge(ctx, e, route);
+      if (holes.length) ctx.restore();
       for (const [n, r] of overlays) this.#drawOverlay(ctx, n, r, 'outline');
-      this.#crossingMarkers(ctx, routed, [...containers, ...overlays]);
+      this.#crossingMarkers(ctx, routed, [...containers, ...overlays], holes);
       const tags = this.#placeTags(ctx, routed);
       for (const [e] of routed) this.#drawEdgeLabel(ctx, e, tags.get(e.id));
       for (const [n, r] of leaves) {
@@ -491,17 +503,22 @@ export class CanvasRenderer {
       const maxW = r.w - (lx - r.x) - 44;
       const label = this.#ellipsize(ctx, n.label || type.label, maxW);
       if (editing !== 'label') ctx.fillText(label, lx, iy + 9 * f + 0.5);
+      const used = this.#measureText(ctx, label);
+      let right = lx + used;
       if (lod === 2) {
-        const used = this.#measureText(ctx, label);
         const caption = captionOf(n) || (type.label ?? '').toUpperCase();
         ctx.font = `500 10.5px ${FONT}`;
         ctx.fillStyle = th.muted;
         const room = maxW - used - 10;
         if (room > 40) {
           this.#captions.set(n.id, { x: lx + used + 10, y: iy + 1.5, w: room, h: 16, size: 10.5, align: 'left' });
-          if (editing !== 'stereotype') ctx.fillText(this.#ellipsize(ctx, caption, room), lx + used + 10, iy + 9.5);
+          const shown = this.#ellipsize(ctx, caption, room);
+          if (editing !== 'stereotype') ctx.fillText(shown, lx + used + 10, iy + 9.5);
+          right = lx + used + 10 + this.#measureText(ctx, shown);
         }
       }
+      // Where the header's icon and text are: links pass behind it (see #labelHoles).
+      this.#headers.set(n.id, { x: ix, y: iy, w: right - ix, h: 18 * f });
     }
     if (lod > 0) this.#toggleButton(ctx, n, color, Math.max(hs, ss), false);
     this.#statusBadge(ctx, n, r, 64);
@@ -604,6 +621,20 @@ export class CanvasRenderer {
     if (lod > 0 && !overlay) this.#toggleButton(ctx, n, color, Math.max(hs, ss), false);
   }
 
+  /**
+   * Where links should not be drawn: the header text of the modules in view and the name
+   * tabs of their boundaries, with a little room around.
+   */
+  #labelHoles(containers) {
+    const pad = 4 / this.z;
+    const out = [];
+    for (const [n] of containers) {
+      const r = this.#headers.get(n.id) ?? this.#tabs.get(n.id);
+      if (r) out.push(inflate(r, pad));
+    }
+    return out;
+  }
+
   /** Border-only boundary, in two passes: the outline under the leaves, the tab above them. */
   #drawOverlay(ctx, n, r, part) {
     const type = resolveType(this.schema, n);
@@ -625,7 +656,7 @@ export class CanvasRenderer {
    * crossing point on the border, so the places that need authentication, validation or
    * encryption stand out.
    */
-  #crossingMarkers(ctx, routed, containers) {
+  #crossingMarkers(ctx, routed, containers, holes = []) {
     const marking = new Map();
     for (const [n, r] of containers) {
       const t = resolveType(this.schema, n);
@@ -641,6 +672,8 @@ export class CanvasRenderer {
         const m = marking.get(b.id);
         if (!m) continue;
         for (const p of borderCrossings(route.poly, m.r)) {
+          // Under a name tab the link is hidden and the tab already sits on the border.
+          if (holes.some((h) => p.x >= h.x && p.x <= h.x + h.w && p.y >= h.y && p.y <= h.y + h.h)) continue;
           ctx.beginPath();
           ctx.moveTo(p.x, p.y - s);
           ctx.lineTo(p.x + s, p.y);

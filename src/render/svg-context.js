@@ -50,6 +50,9 @@ export class SVGContext {
   #start = null;
   #out = [];
   #filters = new Map();
+  #clips = [];
+  /** Groups opened by clip(), closed again by the restore() matching their save(). */
+  #open = 0;
 
   constructor(measure) {
     this.measure = measure;
@@ -57,7 +60,7 @@ export class SVGContext {
 
   // ── state
   save() {
-    const s = { m: [...this.#m], dash: [...this.#dash] };
+    const s = { m: [...this.#m], dash: [...this.#dash], open: this.#open };
     for (const k of STATE_KEYS) s[k] = this[k];
     this.#stack.push(s);
   }
@@ -67,6 +70,7 @@ export class SVGContext {
     if (!s) return;
     this.#m = s.m;
     this.#dash = s.dash;
+    for (; this.#open > s.open; this.#open--) this.#out.push('</g>');
     for (const k of STATE_KEYS) this[k] = s[k];
   }
 
@@ -254,6 +258,15 @@ export class SVGContext {
 
   clearRect() {}
 
+  /** Clip what follows (until the matching restore) to the current path. */
+  clip(rule = 'nonzero') {
+    if (!this.#path) return;
+    const id = 'clip' + this.#clips.length;
+    this.#clips.push(`<clipPath id="${id}"><path d="${this.#path}" clip-rule="${rule === 'evenodd' ? 'evenodd' : 'nonzero'}"/></clipPath>`);
+    this.#out.push(`<g clip-path="url(#${id})">`);
+    this.#open++;
+  }
+
   fillText(text, x, y) {
     const [color, a] = paint(this.fillStyle);
     const m = this.font.match(/^(?:(\d+)\s+)?([\d.]+)px\s+(.*)$/);
@@ -268,7 +281,8 @@ export class SVGContext {
     const defs = [...this.#filters].map(([key, id]) => {
       const [color, alpha, blur, dy] = key.split('|');
       return `<filter id="${id}" x="-25%" y="-25%" width="150%" height="170%"><feDropShadow dx="0" dy="${dy}" stdDeviation="${num(blur / 2)}" flood-color="${color}" flood-opacity="${alpha}"/></filter>`;
-    });
+    }).concat(this.#clips);
+    for (; this.#open > 0; this.#open--) this.#out.push('</g>');
     return [
       `<svg xmlns="http://www.w3.org/2000/svg" width="${num(width)}" height="${num(height)}" viewBox="0 0 ${num(width)} ${num(height)}">`,
       defs.length ? `<defs>${defs.join('')}</defs>` : '',
