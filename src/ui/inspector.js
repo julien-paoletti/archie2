@@ -2,8 +2,12 @@ import { overlaps, polylineCrossesRect } from '../engine/geometry.js';
 import { boundariesCrossed, busMembers, isOverlay, resolveType } from '../engine/schema.js';
 import { h, kbd, svg, ui } from './dom.js';
 import { popover } from './chrome.js';
+import { linkName, safeUrl, splitLinks } from './links.js';
 
 let focusSeq = 0;
+
+/** Element status: [value, label]; '' is the default (in use, no badge). */
+const STATUSES = [['', 'In use'], ['planned', 'Planned'], ['deprecated', 'Deprecated']];
 
 /**
  * Right-hand inspector. Rebuilt on selection change; fields are refreshed in place on
@@ -172,6 +176,12 @@ export function createInspector(editor, app, root, { icons, palette }) {
         row(t.techLabel ?? 'Technology', text(() => get()?.data?.tech, (v, s) => editor.setData(n.id, 'tech', v, s), { placeholder: t.techPlaceholder ?? 'e.g. Go, PostgreSQL, Kafka' })),
         row('Description', text(() => get()?.data?.description, (v, s) => editor.setData(n.id, 'description', v, s), { placeholder: 'What does it do?', multiline: true })),
       ),
+      section('Details',
+        row('Owner', text(() => get()?.data?.owner, (v, s) => editor.setData(n.id, 'owner', v, s), { placeholder: 'Team or person', suggestions: owners() })),
+        row('Status', segmented(STATUSES.map(([k, label]) => [k, label]), () => get()?.data?.status ?? '', (v) => editor.setData(n.id, 'status', v || null))),
+        row('Links', text(() => (get()?.data?.links ?? []).join('\n'), (v, s) => editor.setData(n.id, 'links', splitLinks(v), s), { placeholder: 'Docs, repo… one URL per line', multiline: true })),
+        linkChips(() => get()?.data?.links),
+      ),
       section('Color', swatches([n.id], () => get()?.style?.color)),
       section('Geometry', h('div', { class: 'grid4' },
         row('X', number(() => get().x, (v) => editor.doc.transact('Move', () => doc.moveBy([n.id], v - get().x, 0)))),
@@ -199,6 +209,23 @@ export function createInspector(editor, app, root, { icons, palette }) {
         action('trash', 'Delete', () => editor.deleteSelection(), 'delete', 'danger'),
       )),
     ];
+  };
+
+  /** Owners already named in the diagram, for suggestions. */
+  const owners = () => [...new Set([...doc.nodes.values()].map((x) => x.data?.owner).filter(Boolean))].sort();
+
+  /** The element's links as chips that open in a new tab (web links only). */
+  const linkChips = (get) => {
+    const wrap = h('div', { class: 'link-chips' });
+    const sync = () => wrap.replaceChildren(...(get() ?? []).map((raw) => {
+      const url = safeUrl(raw);
+      return url
+        ? h('a', { class: 'link-chip', href: url.href, target: '_blank', rel: 'noopener noreferrer', title: url.href }, svg(ui.external, { size: 12 }), linkName(url))
+        : h('span', { class: 'link-chip bad', title: 'Only http(s) links can be opened' }, raw);
+    }));
+    sync();
+    refreshers.push(sync);
+    return wrap;
   };
 
   /** Protocols used in the diagram first, then common ones. */

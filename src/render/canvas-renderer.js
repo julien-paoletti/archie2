@@ -14,6 +14,10 @@ export const TEXT_SIZES = {
   xl: { size: 26, lh: 32, weight: 700 },
 };
 export const TEXT_PAD = 4;
+const STATUS_BADGES = {
+  planned: { label: 'PLANNED', color: '#0284c7' },
+  deprecated: { label: 'DEPRECATED', color: '#e11d48' },
+};
 const GEOM = ['x', 'y', 'w', 'h'];
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 const easeOutBack = (t) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
@@ -489,8 +493,30 @@ export class CanvasRenderer {
       }
     }
     if (lod > 0) this.#toggleButton(ctx, n, color, Math.max(hs, ss), false);
+    this.#statusBadge(ctx, n, r, 64);
     this.#selectionRing(ctx, r, radius, ss);
     ctx.restore();
+  }
+
+  /** "Planned" / "Deprecated" pill sitting on the top border, near the right (`inset` clears a header button). */
+  #statusBadge(ctx, n, r, inset = 14) {
+    const s = STATUS_BADGES[n.data?.status];
+    if (!s || this.lod < 2) return;
+    ctx.font = `700 9px ${FONT}`;
+    const w = this.#measureText(ctx, s.label) + 12, h = 15;
+    const x = r.x + r.w - inset - w, y = r.y - h / 2;
+    if (x < r.x + 8) return;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, h / 2);
+    ctx.fillStyle = s.color;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.5, 1 / this.z);
+    ctx.strokeStyle = this.theme.bg;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(s.label, x + w / 2, y + h / 2 + 0.5);
   }
 
   /**
@@ -681,6 +707,7 @@ export class CanvasRenderer {
       if (editing !== 'stereotype') ctx.fillText(this.#ellipsize(ctx, `${count} item${count === 1 ? '' : 's'} · ${kind}`, maxW), r.x + 58, r.y + r.h / 2 + 9);
     }
     this.#toggleButton(ctx, n, color, 1, true);
+    this.#statusBadge(ctx, n, r, 44);
     this.#selectionRing(ctx, r, 12, ss);
     ctx.restore();
   }
@@ -771,6 +798,7 @@ export class CanvasRenderer {
     ctx.setLineDash([]);
     this.#shapeDecoration(ctx, shape, r, color);
     this.#nodeContent(ctx, n, r, type, color, shape, ed.editingId === n.id ? ed.editingField : null);
+    this.#statusBadge(ctx, n, r);
     const radius = shape === 'actor' ? Math.min(r.h / 2, 36) : shape === 'bus' ? Math.min(r.w, r.h) / 2 : 10;
     // While a network bus is selected, its members get a soft dashed halo.
     const ms = this.#exporting ? 0 : this.#fx.value('m' + n.id, this.#members.has(n.id) ? 1 : 0, 18);
