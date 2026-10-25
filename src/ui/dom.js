@@ -136,3 +136,90 @@ export function dismissable(el, close, ignore = []) {
     document.removeEventListener('keydown', onKey, true);
   };
 }
+
+/**
+ * A popover entry for a registered command: title (unless `label`), shortcut and enabled
+ * state come from the registry, so menus can't drift from the commands. `false` (left out)
+ * when the command is unknown or not allowed now (read-only), or disabled with `hideDisabled`.
+ */
+export function commandItem(editor, id, icon, { label, danger = false, hideDisabled = false } = {}) {
+  const c = editor.commands.get(id);
+  if (!c || !editor.allowed(c)) return false;
+  const disabled = !!c.enabled && !c.enabled();
+  if (disabled && hideDisabled) return false;
+  return [icon, label ?? c.title, () => editor.run(id), c.keys?.[0], { disabled, danger }];
+}
+
+/**
+ * Floating menu anchored to an element or a point. items: [icon, label, run, keys?, opts?],
+ * null or '-' for a separator, false for an entry left out.
+ */
+export function popover(anchor, items, placement = 'below') {
+  const menu = h('div', { class: 'panel menu', role: 'menu' });
+  let close;
+  items = items.filter((it) => it === null || it === '-' || it);
+  const clean = items.filter((it, i, a) => (it && it !== '-') || (i > 0 && i < a.length - 1 && a[i - 1] && a[i - 1] !== '-'));
+  for (const item of clean) {
+    if (!item || item === '-') {
+      menu.append(h('i', { class: 'menu-sep' }));
+      continue;
+    }
+    const [icon, label, run, keys, opts = {}] = item;
+    menu.append(h('button', {
+      class: 'menu-item' + (opts.danger ? ' danger' : ''), type: 'button', role: 'menuitem', disabled: opts.disabled,
+      onclick: () => { close(); run(); },
+    }, icon ? svg(ui[icon] ?? icon, { size: 16 }) : h('span', { class: 'ico-space' }), h('span', { class: 'menu-label' }, label), kbd(keys)));
+  }
+  document.body.append(menu);
+  const mr = menu.getBoundingClientRect();
+  let x, y;
+  if (anchor instanceof Element) {
+    const r = anchor.getBoundingClientRect();
+    x = placement === 'right' ? r.right + 8 : r.left;
+    y = placement === 'right' ? r.top : placement === 'above' ? r.top - mr.height - 8 : r.bottom + 8;
+  } else {
+    ({ x, y } = anchor);
+  }
+  x = Math.min(Math.max(8, x), innerWidth - mr.width - 8);
+  y = Math.min(Math.max(8, y), innerHeight - mr.height - 8);
+  Object.assign(menu.style, { left: x + 'px', top: y + 'px' });
+  requestAnimationFrame(() => menu.classList.add('open'));
+  const undismiss = dismissable(menu, () => close());
+  close = () => {
+    undismiss();
+    menu.classList.remove('open');
+    setTimeout(() => menu.remove(), 150);
+  };
+  menu.querySelector('.menu-item:not([disabled])')?.focus({ preventScroll: true });
+  return close;
+}
+
+/**
+ * A modal dialog: a panel over a dimmed backdrop, with a title and a close button. Clicking
+ * the backdrop or pressing Escape closes it. Fill `body`; `onOpen` runs each time it opens
+ * (after it is shown, so it can move the focus).
+ */
+export function modal(title, { cls = '', label = title, onOpen = null } = {}) {
+  const body = h('div', { class: 'modal-body' });
+  const box = h('div', { class: 'panel ' + cls, role: 'dialog', 'aria-label': label },
+    h('div', { class: 'help-head' }, h('h2', {}, title),
+      h('button', { class: 'btn', type: 'button', 'aria-label': 'Close', onclick: () => close() }, svg(ui.x))),
+    body);
+  const backdrop = h('div', { class: 'backdrop' }, box);
+  document.body.append(backdrop);
+  const isOpen = () => backdrop.classList.contains('open');
+  const close = () => backdrop.classList.remove('open');
+  backdrop.addEventListener('pointerdown', (e) => { if (e.target === backdrop) close(); });
+  // One listener per dialog for the app's lifetime (dialogs are created once, at startup).
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isOpen()) {
+      e.stopPropagation();
+      close();
+    }
+  }, true);
+  const open = () => {
+    backdrop.classList.add('open');
+    if (onOpen) requestAnimationFrame(onOpen);
+  };
+  return { open, close, isOpen, body };
+}

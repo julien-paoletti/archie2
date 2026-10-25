@@ -1,6 +1,5 @@
 import { resolveType } from '../engine/schema.js';
-import { h, kbd, svg, ui } from './dom.js';
-import { popover } from './chrome.js';
+import { commandItem, h, kbd, modal, popover, svg, ui } from './dom.js';
 
 /** Subsequence fuzzy match; returns a score (higher is better) or -1. */
 function fuzzy(query, text) {
@@ -106,106 +105,86 @@ export function createCommandPalette(editor, app, { icons }) {
   return { open, close };
 }
 
-/** Right-click menu, contextual to what's under the pointer. */
+/**
+ * Right-click menu, contextual to what's under the pointer. Entries for registered commands
+ * take their title, shortcut and state from the registry; read-only mode leaves out the rest.
+ */
 export function createContextMenu(editor, app, { icons }) {
   editor.on('contextmenu', ({ x, y, world, hit }) => {
     const stage = document.querySelector('#stage').getBoundingClientRect();
     const at = { x: x + stage.left, y: y + stage.top };
-    const doc = editor.doc;
+    const cmd = (id, icon, opts) => commandItem(editor, id, icon, { hideDisabled: true, ...opts });
+    const edit = !editor.readOnly;
     let items;
-    if (editor.readOnly) {
-      // Viewing: only ways to look around.
+    if (hit?.kind === 'node' || hit?.kind === 'port' || hit?.kind === 'handle') {
       items = [
-        editor.selection.size && ['fit', 'Zoom to selection', () => editor.zoomToSelection(), 'shift+2'],
-        editor.selection.size && ['deps', editor.focusDeps ? 'Hide dependencies' : 'Show dependencies', () => editor.toggleDependencies(), 'd'],
-        ['fit', 'Zoom to fit', () => editor.fitView(), 'shift+1'],
-      ];
-    } else if (hit?.kind === 'node' || hit?.kind === 'port' || hit?.kind === 'handle') {
-      const nodes = editor.selectedNodeIds();
-      const container = nodes.some((id) => doc.isContainer(id));
-      items = [
-        nodes.length === 1 && editor.canOpenView(nodes[0]) && ['enter', 'Open as a view', () => editor.openView(nodes[0]), 'o'],
-        nodes.length === 1 && ['edit', 'Rename', () => editor.editLabel(nodes[0]), 'enter'],
-        nodes.length === 1 && ['link', 'Add connected node', () => editor.quickAdd(nodes[0]), 'tab'],
-        ['copy', 'Duplicate', () => editor.duplicate(), 'mod+d'],
-        nodes.length === 1 && ['brush', 'Copy style', () => editor.copyStyle(), 'mod+alt+c'],
-        editor.styleClip && ['brush', 'Paste style', () => editor.pasteStyle(), 'mod+alt+v'],
+        cmd('view.open', 'enter'),
+        cmd('edit.rename', 'edit'),
+        cmd('edit.quickAdd', 'link'),
+        cmd('edit.duplicate', 'copy'),
+        cmd('edit.copyStyle', 'brush'),
+        cmd('edit.pasteStyle', 'brush'),
         '-',
-        ['group', 'Group into module', () => editor.group(), 'mod+g'],
-        ...[...editor.commands.values()].filter((c) => c.id.startsWith('arrange.wrap.') || c.id.startsWith('arrange.outline.')).map((c) => ['boundary', c.title, () => c.run(), c.keys[0]]),
-        container && ['ungroup', 'Ungroup', () => editor.ungroup(), 'mod+shift+g'],
-        container && nodes.length === 1 && !doc.nodes.get(nodes[0]).collapsed && ['layout', 'Layout contents', () => editor.autoLayout(), 'l'],
-        editor.canFitToContent() && ['fitContent', 'Fit to content', () => editor.fitToContent(), 'f'],
-        container && ['collapse', 'Collapse / expand', () => editor.toggleCollapse(), 'c'],
-        ['front', 'Bring to front', () => editor.bringToFront(), ']'],
-        ['front', 'Send to back', () => editor.sendToBack(), '['],
+        cmd('arrange.group', 'group'),
+        ...[...editor.commands.keys()].filter((id) => id.startsWith('arrange.wrap.') || id.startsWith('arrange.outline.')).map((id) => cmd(id, 'boundary')),
+        cmd('arrange.ungroup', 'ungroup'),
+        cmd('arrange.layout', 'layout', { label: editor.selectedNodeIds().some((id) => editor.doc.isContainer(id)) ? 'Layout contents' : null }),
+        cmd('arrange.fit', 'fitContent'),
+        cmd('arrange.collapse', 'collapse'),
+        cmd('arrange.front', 'front'),
+        cmd('arrange.back', 'front'),
         '-',
-        ['fit', 'Zoom to selection', () => editor.zoomToSelection(), 'shift+2'],
-        ['trash', 'Delete', () => editor.deleteSelection(), 'delete', { danger: true }],
+        cmd('view.dependencies', 'deps', { label: editor.focusDeps ? 'Hide dependencies' : 'Show dependencies' }),
+        cmd('view.fitSelection', 'fit'),
+        cmd('edit.delete', 'trash', { danger: true }),
       ];
     } else if (hit?.kind === 'edge') {
       const ids = editor.selectedEdgeIds();
       items = [
-        ['edit', 'Edit label', () => editor.editLabel(hit.id), 'enter'],
-        ['swap', 'Reverse direction', () => editor.reverseEdges(ids)],
-        ['undo', 'Reset route', () => editor.resetRoute(ids), 'r'],
-        ids.length === 1 && ['brush', 'Copy style', () => editor.copyStyle(), 'mod+alt+c'],
-        editor.styleClip && ['brush', 'Paste style', () => editor.pasteStyle(), 'mod+alt+v'],
+        cmd('edit.rename', 'edit', { label: 'Edit label' }),
+        edit && ['swap', 'Reverse direction', () => editor.reverseEdges(ids)],
+        cmd('edge.resetRoute', 'undo'),
+        cmd('edit.copyStyle', 'brush'),
+        cmd('edit.pasteStyle', 'brush'),
         '-',
-        ...Object.entries(editor.schema.edgeTypes).map(([k, v]) => [ui.link, v.label, () => editor.setEdgeType(ids, k)]),
+        ...(edit ? Object.entries(editor.schema.edgeTypes).map(([k, v]) => [ui.link, v.label, () => editor.setEdgeType(ids, k)]) : []),
         '-',
-        ['routeOrth', 'Orthogonal', () => editor.setStyle(ids, { routing: null })],
-        ['routeCurved', 'Curved', () => editor.setStyle(ids, { routing: 'curved' })],
-        ['routeStraight', 'Straight', () => editor.setStyle(ids, { routing: 'straight' })],
+        edit && ['routeOrth', 'Orthogonal', () => editor.setStyle(ids, { routing: null })],
+        edit && ['routeCurved', 'Curved', () => editor.setStyle(ids, { routing: 'curved' })],
+        edit && ['routeStraight', 'Straight', () => editor.setStyle(ids, { routing: 'straight' })],
         '-',
-        ['trash', 'Delete', () => editor.deleteSelection(), 'delete', { danger: true }],
+        cmd('view.fitSelection', 'fit'),
+        cmd('edit.delete', 'trash', { danger: true }),
       ];
     } else {
-      const types = Object.entries(editor.schema.nodeTypes).slice(0, 6);
+      const types = edit ? Object.entries(editor.schema.nodeTypes).slice(0, 6) : [];
       items = [
-        editor.viewRoot != null && ['layers', 'Go up a level', () => editor.viewUp(), 'escape'],
-        editor.viewRoot != null && '-',
+        cmd('view.up', 'layers'),
+        '-',
         ...types.map(([type, t]) => [icons[t.icon], `Add ${t.label.toLowerCase()}`, () => editor.createNode(type, world, { edit: true }), t.shortcut]),
         '-',
-        editor.clipboard && ['copy', 'Paste here', () => editor.paste(), 'mod+v'],
-        ['cursor', 'Select all', () => editor.selectAll(), 'mod+a'],
-        ['layout', 'Auto layout', () => editor.autoLayout(), 'l'],
-        ['fit', 'Zoom to fit', () => editor.fitView(), 'shift+1'],
+        cmd('edit.paste', 'copy', { label: 'Paste here' }),
+        cmd('edit.selectAll', 'cursor'),
+        cmd('arrange.layout', 'layout'),
+        cmd('view.fit', 'fit'),
       ];
     }
-    popover(at, items.filter(Boolean));
+    popover(at, items);
   });
 }
 
 /** "New from template": a card per template, plus a blank diagram and the sample. */
 export function createTemplatePicker(app, { icons, templates }) {
   const card = (icon, title, description, run) => h('button', {
-    type: 'button', class: 'tpl-card', onclick: () => { close(); run(); },
+    type: 'button', class: 'tpl-card', onclick: () => { dialog.close(); run(); },
   }, h('span', { class: 'chip' }, svg(icons[icon] ?? ui[icon], { size: 18 })), h('strong', {}, title), h('span', {}, description));
-  const box = h('div', { class: 'panel templates', role: 'dialog', 'aria-label': 'New from template' },
-    h('div', { class: 'help-head' }, h('h2', {}, 'Start from a template'),
-      h('button', { class: 'btn', type: 'button', 'aria-label': 'Close', onclick: () => close() }, svg(ui.x))),
-    h('div', { class: 'tpl-grid' },
-      ...templates.map((t) => card(t.icon, t.title, t.description, () => app.newFromTemplate(t.id))),
-      card('module', 'E-commerce platform', 'The sample: modules, a network zone, a trust boundary and a dozen services.', () => app.loadSample()),
-      card('file', 'Blank diagram', 'An empty canvas.', () => app.newDiagram())));
-  const backdrop = h('div', { class: 'backdrop' }, box);
-  document.body.append(backdrop);
-  const close = () => backdrop.classList.remove('open');
-  backdrop.addEventListener('pointerdown', (e) => { if (e.target === backdrop) close(); });
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && backdrop.classList.contains('open')) {
-      e.stopPropagation();
-      close();
-    }
-  }, true);
-  return {
-    open: () => {
-      backdrop.classList.add('open');
-      requestAnimationFrame(() => box.querySelector('.tpl-card')?.focus());
-    },
-    close,
-  };
+  const grid = h('div', { class: 'tpl-grid' },
+    ...templates.map((t) => card(t.icon, t.title, t.description, () => app.newFromTemplate(t.id))),
+    card('module', 'E-commerce platform', 'The sample: modules, a network zone, a trust boundary and a dozen services.', () => app.loadSample()),
+    card('file', 'Blank diagram', 'An empty canvas.', () => app.newDiagram()));
+  const dialog = modal('Start from a template', { cls: 'templates', label: 'New from template', onOpen: () => grid.querySelector('.tpl-card')?.focus() });
+  dialog.body.append(grid);
+  return dialog;
 }
 
 /**
@@ -222,7 +201,7 @@ export function createImportDialog(app, { extract }) {
   const run = (replace) => {
     try {
       app.importMermaid(extract(area.value), { replace });
-      close();
+      dialog.close();
     } catch (err) {
       error.textContent = err.message;
     }
@@ -237,9 +216,14 @@ export function createImportDialog(app, { extract }) {
     e.stopPropagation();
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run(false);
   });
-  const box = h('div', { class: 'panel import', role: 'dialog', 'aria-label': 'Import from Mermaid' },
-    h('div', { class: 'help-head' }, h('h2', {}, 'Import from Mermaid'),
-      h('button', { class: 'btn', type: 'button', 'aria-label': 'Close', onclick: () => close() }, svg(ui.x))),
+  const dialog = modal('Import from Mermaid', {
+    cls: 'import',
+    onOpen: () => {
+      error.textContent = '';
+      area.focus();
+    },
+  });
+  dialog.body.append(
     h('p', { class: 'muted small' }, 'Paste a flowchart, or a Markdown file containing one. Subgraphs become modules; cylinders, stadiums and hexagons become databases, actors and queues. You can also paste Mermaid straight onto the canvas.'),
     area, error, file,
     h('div', { class: 'import-actions' },
@@ -247,71 +231,49 @@ export function createImportDialog(app, { extract }) {
       h('span', { style: { flex: 1 } }),
       h('button', { type: 'button', class: 'btn', onclick: () => run(true) }, 'Open as new diagram'),
       h('button', { type: 'button', class: 'btn primary', onclick: () => run(false) }, 'Add to diagram', kbd('mod+enter'))));
-  const backdrop = h('div', { class: 'backdrop' }, box);
-  document.body.append(backdrop);
-  const close = () => backdrop.classList.remove('open');
-  backdrop.addEventListener('pointerdown', (e) => { if (e.target === backdrop) close(); });
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && backdrop.classList.contains('open')) {
-      e.stopPropagation();
-      close();
-    }
-  }, true);
-  return {
-    open: () => {
-      error.textContent = '';
-      backdrop.classList.add('open');
-      requestAnimationFrame(() => area.focus());
-    },
-    close,
-  };
+  return dialog;
 }
 
-/** Keyboard & gesture reference, generated from the command registry. */
+const GESTURES = [
+  ['Double-click canvas', 'Add a component (inside a module: add to it)'],
+  ['Drag a port ●', 'Connect — drop on empty space to create a linked node'],
+  ['Click a port ●', 'Add a connected node in that direction'],
+  ['Drag into a module', 'Nest it (drag out to un-nest)'],
+  ['Ctrl/⌘ + drag', 'Duplicate (press or release Ctrl mid-drag to switch)'],
+  ['Shift + drag', 'Lock to an axis'],
+  ['Alt + drag', 'Move, resize or reshape without snapping'],
+  ['Space + drag, middle or right drag', 'Pan'],
+  ['Wheel / pinch', 'Zoom (trackpad two-finger scroll pans)'],
+  ['Drag empty canvas', 'Box select (Shift adds)'],
+  ['Drag a link', 'Reshape its route (orthogonal: move a segment; others: add a waypoint)'],
+  ['Drag a link end along a side', 'Snaps to the quarter, third and half marks'],
+  ['Drag a port onto a Network', 'Attach it to that shared network'],
+  ['Drop a Firewall onto a link', 'Insert it in the path (A → Firewall → B)'],
+  ['Double-click a resize handle', 'Fit a module, boundary or host to its content'],
+  ['Double-click a caption', 'Change the type label (e.g. Frontend, Backend)'],
+  ['Double-click a waypoint', 'Remove it'],
+  ['Drag a link label', 'Slide it along the link'],
+  ['Click a module chevron', 'Collapse / expand it'],
+  ['Hover an element', 'Its details: description, owner, status, links'],
+  ['Click links while recording a flow', 'Add them as steps, in order'],
+  ['Paste Mermaid text', 'Import it as elements'],
+];
+
+/** Keyboard & gesture reference, generated from the command registry each time it opens. */
 export function createHelp(editor) {
-  const groups = new Map();
-  for (const c of editor.commands.values()) {
-    if (c.hidden || !c.keys?.length) continue;
-    const g = c.group ?? 'General';
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(c);
-  }
-  const gestures = [
-    ['Double-click canvas', 'Add a component (inside a module: add to it)'],
-    ['Drag a port ●', 'Connect — drop on empty space to create a linked node'],
-    ['Click a port ●', 'Add a connected node in that direction'],
-    ['Drag into a module', 'Nest it (drag out to un-nest)'],
-    ['Ctrl/⌘ + drag', 'Duplicate (press or release Ctrl mid-drag to switch)'],
-    ['Shift + drag', 'Lock to an axis'],
-    ['Alt + drag', 'Move, resize or reshape without snapping'],
-    ['Space + drag, middle or right drag', 'Pan'],
-    ['Wheel / pinch', 'Zoom (trackpad two-finger scroll pans)'],
-    ['Drag empty canvas', 'Box select (Shift adds)'],
-    ['Drag a link', 'Reshape its route (orthogonal: move a segment; others: add a waypoint)'],
-    ['Drag a port onto a Network', 'Attach it to that shared network'],
-    ['Drop a Firewall onto a link', 'Insert it in the path (A → Firewall → B)'],
-    ['Double-click a resize handle', 'Fit a module, boundary or host to its content'],
-    ['Double-click a caption', 'Change the type label (e.g. Frontend, Backend)'],
-    ['Double-click a waypoint', 'Remove it'],
-    ['Drag a link label', 'Slide it along the link'],
-    ['Click a module chevron', 'Collapse / expand it'],
-  ];
-  const body = h('div', { class: 'help-grid' },
-    h('section', {}, h('h3', {}, 'Mouse'), ...gestures.map(([a, b]) => h('div', { class: 'help-row' }, h('span', { class: 'gesture' }, a), h('span', {}, b)))),
-    ...[...groups].map(([g, cmds]) => h('section', {}, h('h3', {}, g),
-      ...cmds.map((c) => h('div', { class: 'help-row' }, h('span', {}, c.title), kbd(c.keys[0]))))));
-  const box = h('div', { class: 'panel help', role: 'dialog', 'aria-label': 'Keyboard shortcuts' },
-    h('div', { class: 'help-head' }, h('h2', {}, 'Shortcuts & gestures'), h('button', { class: 'btn', type: 'button', 'aria-label': 'Close', onclick: () => close() }, svg(ui.x))),
-    body);
-  const backdrop = h('div', { class: 'backdrop' }, box);
-  document.body.append(backdrop);
-  const close = () => backdrop.classList.remove('open');
-  backdrop.addEventListener('pointerdown', (e) => { if (e.target === backdrop) close(); });
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && backdrop.classList.contains('open')) {
-      e.stopPropagation();
-      close();
+  const build = () => {
+    const groups = new Map();
+    for (const c of editor.commands.values()) {
+      if (c.hidden || !c.keys?.length) continue;
+      const g = c.group ?? 'General';
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(c);
     }
-  }, true);
-  return { open: () => backdrop.classList.add('open'), close };
+    return h('div', { class: 'help-grid' },
+      h('section', {}, h('h3', {}, 'Mouse'), ...GESTURES.map(([a, b]) => h('div', { class: 'help-row' }, h('span', { class: 'gesture' }, a), h('span', {}, b)))),
+      ...[...groups].map(([g, cmds]) => h('section', {}, h('h3', {}, g),
+        ...cmds.map((c) => h('div', { class: 'help-row' }, h('span', {}, c.title), kbd(c.keys[0]))))));
+  };
+  const dialog = modal('Shortcuts & gestures', { cls: 'help', label: 'Keyboard shortcuts', onOpen: () => dialog.body.replaceChildren(build()) });
+  return dialog;
 }

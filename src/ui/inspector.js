@@ -1,7 +1,6 @@
 import { overlaps, polylineCrossesRect } from '../engine/geometry.js';
 import { boundariesCrossed, busMembers, isOverlay, resolveType } from '../engine/schema.js';
-import { h, isEditable, kbd, svg, ui } from './dom.js';
-import { popover } from './chrome.js';
+import { h, isEditable, kbd, popover, svg, ui } from './dom.js';
 import { linkName, safeUrl, splitLinks } from './links.js';
 
 let focusSeq = 0;

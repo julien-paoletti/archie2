@@ -27,7 +27,7 @@ const TEXT_FORMATS = {
   mermaid: { name: 'Mermaid', ext: 'mmd', build: toMermaid },
   plantuml: { name: 'PlantUML', ext: 'puml', build: toPlantUML },
   structurizr: { name: 'Structurizr DSL', ext: 'dsl', build: toStructurizr },
-  markdown: { name: 'Markdown', ext: 'md', build: toMarkdown },
+  markdown: { name: 'Markdown catalog', ext: 'md', build: toMarkdown },
 };
 
 const DOC_KEY = 'archie:document';
@@ -394,26 +394,7 @@ const resize = () => {
 new ResizeObserver(resize).observe(stage);
 resize();
 
-bindInput(editor, canvas);
-createGrid(editor, stage);
-createLabelEditor(editor, stage);
-createTopBar(editor, app, root, { extras: [createChecks(editor)] });
-createPresentBar(editor, app, root);
-createFlowPlayer(editor, root);
-createBreadcrumb(editor, root);
-createDock(editor, app, root, icons);
-createMinimap(editor, createViewControls(editor, app, root), app);
-createHints(editor, root);
-createInspector(editor, app, root, { icons, palette });
-createSelectionBar(editor, app, root, { palette });
-createHoverCard(editor, root, { icons });
-createContextMenu(editor, app, { icons });
-const toast = createToaster(root);
-const palette_ = createCommandPalette(editor, app, { icons });
-const help = createHelp(editor);
-const templatePicker = createTemplatePicker(app, { icons, templates });
-const importDialog = createImportDialog(app, { extract: extractMermaid });
-
+// Commands first: the UI built below reads the registry (help sheet, tooltips, menus).
 const appCommands = [
   { id: 'app.palette', title: 'Command palette', group: 'View', keys: ['mod+k', '/'], run: () => app.openPalette() },
   { id: 'app.help', title: 'Keyboard shortcuts', group: 'View', keys: ['shift+?', '?'], run: () => app.openHelp() },
@@ -439,6 +420,28 @@ const appCommands = [
   { id: 'debug.stress', title: 'Stress test: 2,000 nodes', group: 'File', run: () => app.stressTest() },
 ];
 appCommands.forEach((c) => editor.registerCommand(c));
+
+bindInput(editor, canvas);
+createGrid(editor, stage);
+createLabelEditor(editor, stage);
+createTopBar(editor, app, root, { extras: [createChecks(editor)] });
+createPresentBar(editor, app, root);
+createFlowPlayer(editor, root);
+createBreadcrumb(editor, root);
+createDock(editor, app, root, icons);
+createMinimap(editor, createViewControls(editor, app, root), app);
+createHints(editor, root);
+createInspector(editor, app, root, { icons, palette });
+createSelectionBar(editor, app, root, { palette });
+createHoverCard(editor, root, { icons });
+createContextMenu(editor, app, { icons });
+const toast = createToaster(root);
+const palette_ = createCommandPalette(editor, app, { icons });
+const help = createHelp(editor);
+const templatePicker = createTemplatePicker(app, { icons, templates });
+const importDialog = createImportDialog(app, { extract: extractMermaid });
+
+
 
 editor.on('layout', () => toast('Auto layout applied', { icon: 'layout', action: { label: 'Undo', run: () => editor.undo() } }));
 editor.on('settings', () => app.savePrefs());
