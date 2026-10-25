@@ -197,7 +197,7 @@ The `boundary` type uses this for trust boundaries and network zones:
 - The inspector lists the boundaries a link crosses and the links crossing a boundary.
 - "Wrap in …" commands are generated per variant: <kbd>B</kbd> wraps in the first variant and <kbd>Shift+B</kbd> in the second.
 
-Shapes: `card` (default), `cylinder`, `note`, `actor` and `boundary`.
+Shapes: `card` (default), `cylinder`, `note`, `actor`, `document` (a wave along the bottom, swinging around the box's bottom edge so links meet it) and `boundary`.
 
 Two more schema flags:
 

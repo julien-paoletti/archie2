@@ -16,6 +16,7 @@ export const icons = {
   bus: 'M3 15h18 M6 15V9 M12 15V6 M18 15v-4 M4.5 9h3 M10.5 6h3 M16.5 11h3',
   database: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
   queue: 'M3 7h18v10H3z M8 7v10 M13 7v10 M18 7v10',
+  document: 'M5 3h14v15.5c-2.3-1.6-4.7-1.6-7 0s-4.7 1.6-7 0z M8.5 8h7 M8.5 12h4.5',
   client: 'M3 4h18v12H3z M8 20h8 M12 16v4',
   external: 'M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18z',
   actor: 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 3.6-7 8-7s8 3 8 7',
@@ -51,6 +52,10 @@ export const architectureSchema = {
     application: { label: 'Application', w: 200, h: 72, color: '#c026d3', icon: 'application', dock: 'software', hint: 'A program users or systems run' },
     service: { label: 'Service', w: 200, h: 72, color: '#14b8a6', icon: 'service', shortcut: '3', dock: 'software', hint: 'A deployable unit' },
     database: { label: 'Database', w: 160, h: 96, color: '#f59e0b', icon: 'database', shape: 'cylinder', shortcut: '4', dock: 'software', hint: 'Persistent storage' },
+    document: {
+      label: 'Document', w: 200, h: 72, color: '#65a30d', icon: 'document', shape: 'document', dock: 'software',
+      hint: 'A file, report or dataset', techLabel: 'Format', techPlaceholder: 'e.g. PDF, CSV, Parquet on S3',
+    },
     queue: { label: 'Queue', w: 200, h: 64, color: '#ec4899', icon: 'queue', shortcut: '5', dock: 'software', hint: 'Broker, topic, stream' },
     client: { label: 'Client', w: 200, h: 72, color: '#8b5cf6', icon: 'client', shortcut: '6', dock: 'software', hint: 'Web, mobile, CLI' },
     server: {

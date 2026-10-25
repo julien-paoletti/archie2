@@ -913,6 +913,18 @@ export class CanvasRenderer {
       ctx.lineTo(r.x, r.y + 6);
       ctx.arcTo(r.x, r.y, r.x + 6, r.y, 6);
       ctx.closePath();
+    } else if (shape === 'document') {
+      // The flowchart document: rounded top, one gentle wave along the bottom. The wave swings
+      // around the box's bottom edge, so a link meeting its middle touches it and bottoms align.
+      const a = Math.min(6, r.h * 0.08), yb = r.y + r.h;
+      ctx.moveTo(r.x, yb);
+      ctx.lineTo(r.x, r.y + 10);
+      ctx.arcTo(r.x, r.y, r.x + 10, r.y, 10);
+      ctx.lineTo(r.x + r.w - 10, r.y);
+      ctx.arcTo(r.x + r.w, r.y, r.x + r.w, r.y + 10, 10);
+      ctx.lineTo(r.x + r.w, yb);
+      ctx.bezierCurveTo(r.x + r.w * 0.6, yb - a * 3.4, r.x + r.w * 0.4, yb + a * 3.4, r.x, yb);
+      ctx.closePath();
     } else {
       ctx.roundRect(r.x, r.y, r.w, r.h, shape === 'actor' ? Math.min(r.h / 2, 36) : shape === 'bus' ? Math.min(r.w, r.h) / 2 : 10);
     }
