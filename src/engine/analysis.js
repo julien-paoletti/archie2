@@ -1,7 +1,8 @@
 /**
  * Graph queries over the document's links. A link A → B reads "A depends on B" (A uses,
- * calls or sends to B). Containment is not a dependency, but a container stands for
- * everything inside it: the dependencies of a module are those of its contents.
+ * calls or sends to B); a link going both ways (`data.bidirectional`) reads both ways.
+ * Containment is not a dependency, but a container stands for everything inside it: the
+ * dependencies of a module are those of its contents.
  */
 
 /** The node and everything nested in it. */
@@ -17,8 +18,11 @@ function walk(doc, start, down) {
   while (queue.length) {
     const id = queue.shift();
     for (const e of doc.edgesOf(id)) {
-      const [from, to] = down ? [e.source, e.target] : [e.target, e.source];
-      if (from !== id) continue;
+      let [from, to] = down ? [e.source, e.target] : [e.target, e.source];
+      if (from !== id) {
+        if (!e.data?.bidirectional) continue;
+        [from, to] = [to, from];
+      }
       edges.add(e.id);
       if (!seen.has(to)) {
         seen.add(to);
@@ -61,7 +65,11 @@ export function pathsBetween(doc, a, b) {
     // On a path: reachable from `from`, and still leading to `to`.
     const back = walk(doc, target, false);
     for (const n of fwd.nodes) if (back.nodes.has(n)) nodes.add(n);
-    for (const id of fwd.edges) if (back.nodes.has(doc.edges.get(id).target)) edges.add(id);
+    for (const id of fwd.edges) {
+      const e = doc.edges.get(id);
+      const leads = (from, to) => fwd.nodes.has(from) && back.nodes.has(to);
+      if (leads(e.source, e.target) || (e.data?.bidirectional && leads(e.target, e.source))) edges.add(id);
+    }
   }
   return { nodes, edges, found };
 }

@@ -283,10 +283,12 @@ export function createInspector(editor, app, root, { icons, palette }) {
     return [
       section(null, h('div', { class: 'edge-ends' },
         h('button', { type: 'button', class: 'end', onclick: () => editor.reveal(get().source) }, name(e.source)),
-        svg(ui.dirLR, { size: 14 }),
+        svg(e.data?.bidirectional ? ui.both : ui.dirLR, { size: 14 }),
         h('button', { type: 'button', class: 'end', onclick: () => editor.reveal(get().target) }, name(e.target)),
       )),
-      section('Kind', kindPicker(e)),
+      section('Kind', kindPicker(e),
+        h('div', { style: { marginTop: '8px' } }, segmented([['one', 'One way', ui.dirLR], ['both', 'Both ways', ui.both]],
+          () => (get()?.data?.bidirectional ? 'both' : 'one'), (v) => editor.setBidirectional([e.id], v === 'both'), { labels: true }))),
       crosses.length > 0 && section('Crosses', h('div', { class: 'conns' }, ...crosses.map((b) => {
         const bt = resolveType(editor.schema, b);
         return h('button', { type: 'button', class: 'conn', onclick: () => editor.reveal(b.id) },
@@ -305,7 +307,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
       section('Color', swatches([e.id], () => get()?.style?.color)),
       section(null, h('div', { class: 'actions' },
         action('edit', 'Edit label', () => editor.editLabel(e.id), 'enter'),
-        action('swap', 'Reverse direction', () => editor.reverseEdges([e.id])),
+        !e.data?.bidirectional && action('swap', 'Reverse direction', () => editor.reverseEdges([e.id])),
         (e.style?.points || e.style?.labelT != null) && action('routeOrth', 'Reset route', () => editor.resetRoute([e.id]), 'r'),
         action('trash', 'Delete', () => editor.deleteSelection(), 'delete', 'danger'),
       )),
@@ -455,7 +457,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
     };
     const rebuild = e.reset || e.patch.ops.some((op) => op.t !== 'set' || op.k === 'flow' || 'type' in op.after || 'source' in op.after ||
       'target' in op.after || 'collapsed' in op.after || ('style' in op.after && manualFlip(op)) ||
-      ('data' in op.after && !!op.before.data?.borderOnly !== !!op.after.data?.borderOnly));
+      ('data' in op.after && (!!op.before.data?.borderOnly !== !!op.after.data?.borderOnly || !!op.before.data?.bidirectional !== !!op.after.data?.bidirectional)));
     if (rebuild && !typing()) render();
     else refresh();
   });

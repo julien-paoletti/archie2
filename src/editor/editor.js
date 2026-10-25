@@ -1584,6 +1584,20 @@ export class Editor extends Emitter {
     this.doc.transact('Edit', () => this.doc.update(id, { data: { ...o.data, [key]: value } }), { merge });
   }
 
+  /** Links going both ways (an arrowhead at each end, dependencies both ways), or one way. */
+  setBidirectional(ids, on) {
+    this.doc.transact(on ? 'Both ways' : 'One way', () => {
+      for (const id of ids) {
+        const e = this.doc.edges.get(id);
+        if (!e) continue;
+        const data = { ...e.data };
+        if (on) data.bidirectional = true;
+        else delete data.bidirectional;
+        this.doc.update(id, { data });
+      }
+    });
+  }
+
   reverseEdges(ids) {
     this.doc.transact('Reverse', () => {
       for (const id of ids) {

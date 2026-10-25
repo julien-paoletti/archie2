@@ -143,6 +143,10 @@ export function createContextMenu(editor, app, { icons }) {
       items = [
         cmd('edit.rename', 'edit', { label: 'Edit label' }),
         edit && ['swap', 'Reverse direction', () => editor.reverseEdges(ids)],
+        edit && (() => {
+          const both = ids.every((id) => editor.doc.edges.get(id)?.data?.bidirectional);
+          return ['both', both ? 'One way' : 'Both ways', () => editor.setBidirectional(ids, !both)];
+        })(),
         cmd('edge.resetRoute', 'undo'),
         cmd('edit.copyStyle', 'brush'),
         cmd('edit.pasteStyle', 'brush'),

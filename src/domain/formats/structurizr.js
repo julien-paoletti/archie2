@@ -83,7 +83,10 @@ export function toStructurizr(doc, { title = 'Architecture', direction = 'LR' } 
     if (doc.isAncestor(e.source, e.target) || doc.isAncestor(e.target, e.source)) continue;
     const parts = [e.label ?? '', e.data?.tech ?? '', e.type === 'async' ? 'Asynchronous' : ''];
     while (parts.length && !parts.at(-1)) parts.pop();
-    lines.push(`    ${ids.get(e.source)} -> ${ids.get(e.target)}${parts.map((p) => ' ' + s(p)).join('')}`);
+    const rest = parts.map((p) => ' ' + s(p)).join('');
+    lines.push(`    ${ids.get(e.source)} -> ${ids.get(e.target)}${rest}`);
+    // C4 relationships go one way: a link both ways is one each way.
+    if (e.data?.bidirectional) lines.push(`    ${ids.get(e.target)} -> ${ids.get(e.source)}${rest}`);
   }
   const layout = `autoLayout ${direction === 'TB' ? 'tb' : 'lr'}`;
   lines.push('  }', '', '  views {', '    systemLandscape {', '      include *', `      ${layout}`, '    }');

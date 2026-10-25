@@ -44,7 +44,8 @@ export function toMermaid(doc, { direction = 'LR' } = {}) {
     const s = doc.nodes.get(e.source), t = doc.nodes.get(e.target);
     if (!exported(doc, s) || !exported(doc, t)) continue;
     const text = [e.label, e.data?.tech].filter(Boolean).join('\n');
-    const arrow = ARROWS[e.type] ?? '-->';
+    const one = ARROWS[e.type] ?? '-->';
+    const arrow = e.data?.bidirectional && one.endsWith('>') ? '<' + one : one;
     lines.push(`  ${ids.get(e.source)} ${arrow}${text ? `|"${esc(text)}"|` : ''} ${ids.get(e.target)}`);
   }
   for (const [key, c] of classes) {
@@ -187,6 +188,7 @@ export function fromMermaid(text) {
     for (;;) {
       if (!rest.trim()) break;
       let m = EDGE.exec(rest), arrow, label, used;
+      const both = !!m?.[1] || !!TEXT_OPEN.exec(rest)?.[1];
       if (m) [arrow, label, used] = [m[2], m[3], m[0].length];
       else if ((m = TEXT_OPEN.exec(rest))) {
         TEXT_CLOSE.lastIndex = m[0].length;
@@ -196,7 +198,7 @@ export function fromMermaid(text) {
       } else throw new Error(`Line ${lineNo}: can't read "${rest.trim().slice(0, 60)}"`);
       const [to, after] = readGroup(rest.slice(used), lineNo);
       if (edges.length + from.length * to.length > MAX_ITEMS || nodes.size > MAX_ITEMS) throw new Error(`Line ${lineNo}: too many elements`);
-      for (const s of from) for (const t of to) edges.push(edgeOf(s, t, arrow, label));
+      for (const s of from) for (const t of to) edges.push(edgeOf(s, t, arrow, label, both));
       [from, rest] = [to, after];
     }
   });
@@ -205,10 +207,10 @@ export function fromMermaid(text) {
 }
 
 /** Thick arrows read as data flow, dotted as async, arrowless as association, the rest as uses. */
-function edgeOf(source, target, arrow, label) {
+function edgeOf(source, target, arrow, label, both = false) {
   const head = /[>ox]$/.test(arrow);
   const type = arrow.includes('=') ? 'dataflow' : arrow.includes('.') ? (head ? 'async' : 'association') : head ? 'uses' : 'association';
-  const e = { source, target, type, label: '', data: {} };
+  const e = { source, target, type, label: '', data: both && head ? { bidirectional: true } : {} };
   if (label) {
     const [text, ...rest] = unescape(label).split('\n');
     e.label = text.trim();

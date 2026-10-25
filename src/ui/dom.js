@@ -34,6 +34,7 @@ export const ui = {
   layout: 'M3 3h6v6H3z M15 3h6v6h-6z M9 15h6v6H9z M6 9v3h12V9 M12 12v3',
   dirLR: 'M4 12h16 M14 6l6 6-6 6',
   dirTB: 'M12 4v16 M6 14l6 6 6-6',
+  both: 'M4 12h16 M8 8l-4 4 4 4 M16 8l4 4-4 4',
   grid: 'M3 3h18v18H3z M3 9h18 M3 15h18 M9 3v18 M15 3v18',
   guides: 'M4 12h16 M12 4v16 M8 8h8v8H8z',
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M21 21l-4.3-4.3',

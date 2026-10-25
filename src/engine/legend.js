@@ -5,7 +5,7 @@ import { boundariesCrossed, isOverlay, resolveType } from './schema.js';
  * legend is known without measuring text. Entries, in sections:
  *   { kind: 'node', label, sub, icon, color, shape }    element kinds (by type label)
  *   { kind: 'boundary', label, color, dashed }          boundary kinds
- *   { kind: 'edge', label, dash, arrow, width }         link kinds
+ *   { kind: 'edge', label, dash, arrow, width, both }   link kinds (both: used both ways)
  *   { kind: 'marker', label, color }                    trust boundary crossings
  *   { kind: 'status', label, status, color }            status badges in use (schema.statuses)
  */
@@ -51,7 +51,9 @@ function computeEntries(doc) {
   const overlays = [...doc.nodes.values()].filter((n) => isOverlay(doc, n));
   for (const e of doc.edges.values()) {
     const et = schema.edgeTypes?.[e.type] ?? {};
-    if (!edges.has(e.type)) edges.set(e.type, { kind: 'edge', label: et.label ?? e.type, dash: et.dash ?? null, arrow: et.arrow ?? 'filled', width: et.width ?? 1.5 });
+    const both = !!e.data?.bidirectional && et.arrow !== 'none';
+    const key = e.type + (both ? ':both' : '');
+    if (!edges.has(key)) edges.set(key, { kind: 'edge', label: (et.label ?? e.type) + (both ? ' (both ways)' : ''), dash: et.dash ?? null, arrow: et.arrow ?? 'filled', width: et.width ?? 1.5, both });
     if (!crossings) {
       const b = boundariesCrossed(doc, e, overlays).find((x) => resolveType(schema, x).markCrossings);
       if (b) crossings = { kind: 'marker', label: `Crosses a ${resolveType(schema, b).label.toLowerCase()}`, color: b.style?.color ?? resolveType(schema, b).color };

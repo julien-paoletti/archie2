@@ -35,7 +35,7 @@ const NODE_STYLE = {
 const EDGE_STYLE = {
   color, routing: oneOf('curved', 'straight'), points, labelT: (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined),
 };
-const EDGE_DATA = { tech: text(500) };
+const EDGE_DATA = { tech: text(500), bidirectional: oneOf(true) };
 
 /** Keep only the fields `spec` knows, each checked; everything else is dropped. */
 function fields(o, spec) {

@@ -47,7 +47,9 @@ export function toPlantUML(doc, { title = '', direction = 'LR' } = {}) {
     const s = doc.nodes.get(e.source), t = doc.nodes.get(e.target);
     if (!exported(doc, s) || !exported(doc, t)) continue;
     const text = [e.label, e.data?.tech].filter(Boolean).join(' · ').replace(/\n/g, ' ');
-    lines.push(`${ids.get(e.source)} ${ARROWS[e.type] ?? '-->'} ${ids.get(e.target)}${text ? ` : ${text}` : ''}`);
+    const one = ARROWS[e.type] ?? '-->';
+    const arrow = e.data?.bidirectional && one.endsWith('>') ? '<' + one : one;
+    lines.push(`${ids.get(e.source)} ${arrow} ${ids.get(e.target)}${text ? ` : ${text}` : ''}`);
   }
   lines.push('@enduml');
   return lines.join('\n') + '\n';

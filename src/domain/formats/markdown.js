@@ -29,7 +29,7 @@ export function toMarkdown(doc, { title = 'Architecture' } = {}) {
   if (links.length) {
     out.push('', '## Links', '', '| From | To | Kind | Label | Protocol |', '|---|---|---|---|---|');
     for (const e of links) {
-      const kind = doc.schema.edgeTypes?.[e.type]?.label ?? e.type;
+      const kind = (doc.schema.edgeTypes?.[e.type]?.label ?? e.type) + (e.data?.bidirectional ? ' (both ways)' : '');
       out.push('| ' + [name(e.source), name(e.target), kind, e.label, e.data?.tech].map(cell).join(' | ') + ' |');
     }
   }

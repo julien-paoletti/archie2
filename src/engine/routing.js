@@ -2,8 +2,9 @@ import { boundaryPoint, boundsOf, center, clamp, cubicPoint, dist, pointAlong, p
 
 /**
  * Edge routing. All routers return the same shape:
- *   { kind: 'poly' | 'bezier', points, poly, bbox, mid: {x,y}, end: {x,y}, manual?, smooth?, legs?, straight? }
- * `poly` is a polyline usable for hit testing, `end` the unit direction at the target.
+ *   { kind: 'poly' | 'bezier', points, poly, bbox, mid: {x,y}, start: {x,y}, end: {x,y}, manual?, smooth?, legs?, straight? }
+ * `poly` is a polyline usable for hit testing; `start` and `end` are the unit directions out of
+ * the source and into the target.
  * `straight` marks a centre-to-centre line (straight routing), which port spreading leaves alone.
  *
  * The orthogonal router runs A* over a sparse "orthogonal visibility" grid built from
@@ -547,8 +548,16 @@ export function finish(kind, points, extra = null) {
   const n = points.length;
   let a = points[n - 2], b = points[n - 1];
   if (kind === 'bezier' && dist(a, b) < 0.01) a = points[1];
-  const len = dist(a, b) || 1;
-  return { kind, points, poly, bbox, mid: { x: mid.x, y: mid.y }, end: { x: (b.x - a.x) / len, y: (b.y - a.y) / len }, ...extra };
+  // Unit directions at both ends: `end` into the target, `start` out of the source.
+  let s0 = points[0], s1 = points[1];
+  if (kind === 'bezier' && dist(s0, s1) < 0.01) s1 = points[2];
+  const len = dist(a, b) || 1, slen = dist(s0, s1) || 1;
+  return {
+    kind, points, poly, bbox, mid: { x: mid.x, y: mid.y },
+    end: { x: (b.x - a.x) / len, y: (b.y - a.y) / len },
+    start: { x: (s1.x - s0.x) / slen, y: (s1.y - s0.y) / slen },
+    ...extra,
+  };
 }
 
 class MinHeap {

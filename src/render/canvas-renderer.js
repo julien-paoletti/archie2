@@ -1057,15 +1057,18 @@ export class CanvasRenderer {
       ctx.stroke();
     } else if (e.kind === 'edge') {
       const lw = Math.max(e.width, 1 / z);
+      const inset = e.arrow === 'filled' ? 7 : 1;
       ctx.beginPath();
-      ctx.moveTo(x, cy);
-      ctx.lineTo(x + (e.arrow === 'filled' ? 17 : 23), cy);
+      ctx.moveTo(x + (e.both ? inset : 0), cy);
+      ctx.lineTo(x + 24 - inset, cy);
       if (e.dash) ctx.setLineDash(e.dash.map((d) => d * 0.7));
       ctx.lineWidth = lw;
       ctx.strokeStyle = th.edge;
       ctx.stroke();
       ctx.setLineDash([]);
-      this.#arrow(ctx, { points: [{ x, y: cy }, { x: x + 24, y: cy }], end: { x: 1, y: 0 } }, e.arrow, th.edge, lw);
+      const sample = { points: [{ x, y: cy }, { x: x + 24, y: cy }], start: { x: 1, y: 0 }, end: { x: 1, y: 0 } };
+      this.#arrow(ctx, sample, e.arrow, th.edge, lw);
+      if (e.both) this.#arrow(ctx, sample, e.arrow, th.edge, lw, true);
     } else if (e.kind === 'marker') {
       ctx.beginPath();
       ctx.moveTo(x + 12, cy - 6);
@@ -1182,18 +1185,21 @@ export class CanvasRenderer {
     const arrow = et.arrow ?? 'filled';
     const color = hi > 0.4 ? th.accent : e.style?.color ?? th.edge;
     const shorten = arrow === 'filled' ? 7 + lw : 0.5;
+    // Both ways: an arrowhead at each end.
+    const both = !!e.data?.bidirectional && arrow !== 'none';
+    const shortenStart = both ? shorten : 0;
 
     ctx.save();
     ctx.globalAlpha = easeOut(ap) * this.#fade(e.id, 'edge');
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     if (hi > 0.01 && lod > 0) {
-      this.#tracePath(ctx, route, shorten);
+      this.#tracePath(ctx, route, shorten, shortenStart);
       ctx.strokeStyle = withAlpha(th.accent, 0.16 * hi + 0.14 * is);
       ctx.lineWidth = lw + (7 + 6 * is) / z;
       ctx.stroke();
     }
-    this.#tracePath(ctx, route, shorten);
+    this.#tracePath(ctx, route, shorten, shortenStart);
     if (et.dash && lod > 0) ctx.setLineDash(et.dash);
     ctx.lineWidth = lw + 0.5 * ss;
     ctx.strokeStyle = color;
@@ -1201,7 +1207,7 @@ export class CanvasRenderer {
     ctx.setLineDash([]);
     if ((ss > 0.5 || hs > 0.6 || is > 0.5 || fs > 0.5) && lod > 0) {
       // Marching dots show direction on focused edges (backwards for a flow's response step).
-      this.#tracePath(ctx, route, shorten);
+      this.#tracePath(ctx, route, shorten, shortenStart);
       ctx.setLineDash([0.01, 16]);
       ctx.lineDashOffset = (step?.edge === e.id && step.reverse ? 1 : -1) * ((this.now / 28) % 16);
       ctx.lineWidth = lw + 1.6;
@@ -1210,7 +1216,10 @@ export class CanvasRenderer {
       ctx.setLineDash([]);
       this.#animating = true;
     }
-    if (lod > 0) this.#arrow(ctx, route, arrow, color, lw);
+    if (lod > 0) {
+      this.#arrow(ctx, route, arrow, color, lw);
+      if (both) this.#arrow(ctx, route, arrow, color, lw, true);
+    }
     ctx.restore();
   }
 
@@ -1446,18 +1455,20 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
-  #tracePath(ctx, route, shorten = 0) {
+  /** The route as a path; `shorten` / `shortenStart` leave room for arrowheads at the ends. */
+  #tracePath(ctx, route, shorten = 0, shortenStart = 0) {
     const pts = route.points;
-    const d = route.end;
+    const d = route.end, s = route.start ?? { x: 0, y: 0 };
+    const first = { x: pts[0].x + s.x * shortenStart, y: pts[0].y + s.y * shortenStart };
     ctx.beginPath();
     if (route.kind === 'bezier') {
-      const [p0, c1, c2, p3] = pts;
-      ctx.moveTo(p0.x, p0.y);
+      const [, c1, c2, p3] = pts;
+      ctx.moveTo(first.x, first.y);
       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p3.x - d.x * shorten, p3.y - d.y * shorten);
       return;
     }
     if (route.smooth) {
-      ctx.moveTo(pts[0].x, pts[0].y);
+      ctx.moveTo(first.x, first.y);
       for (let i = 1; i < pts.length - 1; i++) ctx.lineTo(pts[i].x, pts[i].y);
       const last = pts[pts.length - 1];
       ctx.lineTo(last.x - d.x * shorten, last.y - d.y * shorten);
@@ -1465,19 +1476,20 @@ export class CanvasRenderer {
     }
     const n = pts.length;
     const last = { x: pts[n - 1].x - d.x * shorten, y: pts[n - 1].y - d.y * shorten };
-    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.moveTo(first.x, first.y);
     for (let i = 1; i < n - 1; i++) {
       const p = pts[i], q = i === n - 2 ? last : pts[i + 1];
-      const rad = Math.min(12, dist(pts[i - 1], p) / 2, dist(p, q) / 2);
+      const rad = Math.min(12, dist(i === 1 ? first : pts[i - 1], p) / 2, dist(p, q) / 2);
       ctx.arcTo(p.x, p.y, q.x, q.y, rad);
     }
     ctx.lineTo(last.x, last.y);
   }
 
-  #arrow(ctx, route, kind, color, lw) {
+  /** Arrowhead at the target (`atStart`: at the source, for links going both ways). */
+  #arrow(ctx, route, kind, color, lw, atStart = false) {
     if (kind === 'none') return;
-    const p = route.points[route.points.length - 1];
-    const d = route.end;
+    const p = atStart ? route.points[0] : route.points[route.points.length - 1];
+    const d = atStart ? { x: -route.start.x, y: -route.start.y } : route.end;
     const L = 9 + lw * 1.5, W = 4.5 + lw;
     const bx = p.x - d.x * L, by = p.y - d.y * L;
     const px = -d.y, py = d.x;
