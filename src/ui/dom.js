@@ -13,7 +13,7 @@ export function h(tag, props = {}, ...children) {
     }
     else if (k === 'dataset') Object.assign(el.dataset, v);
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
-    else if (k === 'value' || k === 'checked' || k === 'html') k === 'html' ? (el.innerHTML = v) : (el[k] = v);
+    else if (k === 'value' || k === 'checked') el[k] = v;
     else el.setAttribute(k, v === true ? '' : v);
   }
   for (const c of children.flat(Infinity)) if (c != null && c !== false) el.append(c instanceof Node ? c : String(c));
