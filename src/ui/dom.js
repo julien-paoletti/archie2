@@ -99,6 +99,18 @@ export const ui = {
   deps: 'M7 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M21 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M21 19a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M7 11l10-5 M7 13l10 5',
 };
 
+/**
+ * A small sample of a link kind (from its edge type: dashes, arrowhead, thickness), as an
+ * icon element, for pickers and menus.
+ */
+export function linkKindIcon(et = {}, size = 16) {
+  const none = et.arrow === 'none';
+  const end = none ? 21 : 19;
+  const line = et.dash ? `M3 12h3 M9 12h3 M15 12h${end - 15}` : `M3 12h${end - 3}`;
+  const head = none ? '' : et.arrow === 'open' ? ' M15 7l5 5-5 5' : ' M15 7.5l5 4.5-5 4.5z';
+  return svg(line + head, { size, stroke: (et.width ?? 1.5) > 1.5 ? 3 : 2 });
+}
+
 /** "1 link", "3 links". */
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -171,7 +183,7 @@ export function popover(anchor, items, placement = 'below') {
     menu.append(h('button', {
       class: 'menu-item' + (opts.danger ? ' danger' : ''), type: 'button', role: 'menuitem', disabled: opts.disabled,
       onclick: () => { close(); run(); },
-    }, icon ? svg(ui[icon] ?? icon, { size: 16 }) : h('span', { class: 'ico-space' }), h('span', { class: 'menu-label' }, label), kbd(keys)));
+    }, icon instanceof Node ? icon : icon ? svg(ui[icon] ?? icon, { size: 16 }) : h('span', { class: 'ico-space' }), h('span', { class: 'menu-label' }, label), kbd(keys)));
   }
   document.body.append(menu);
   const mr = menu.getBoundingClientRect();

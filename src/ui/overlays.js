@@ -1,5 +1,5 @@
 import { resolveType } from '../engine/schema.js';
-import { commandItem, h, kbd, modal, popover, svg, ui } from './dom.js';
+import { commandItem, h, kbd, linkKindIcon, modal, popover, svg, ui } from './dom.js';
 
 /** Subsequence fuzzy match; returns a score (higher is better) or -1. */
 function fuzzy(query, text) {
@@ -147,7 +147,7 @@ export function createContextMenu(editor, app, { icons }) {
         cmd('edit.copyStyle', 'brush'),
         cmd('edit.pasteStyle', 'brush'),
         '-',
-        ...(edit ? Object.entries(editor.schema.edgeTypes).map(([k, v]) => [ui.link, v.label, () => editor.setEdgeType(ids, k)]) : []),
+        ...(edit ? Object.entries(editor.schema.edgeTypes).map(([k, v]) => [linkKindIcon(v), v.label, () => editor.setEdgeType(ids, k)]) : []),
         '-',
         edit && ['routeOrth', 'Orthogonal', () => editor.setStyle(ids, { routing: null })],
         edit && ['routeCurved', 'Curved', () => editor.setStyle(ids, { routing: 'curved' })],

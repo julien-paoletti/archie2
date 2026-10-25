@@ -259,6 +259,7 @@ kbd {
   transition: border-color 0.15s, background-color 0.15s;
 }
 .type-picker:hover { border-color: var(--border-strong); }
+.kind-picker { --c: var(--muted); }
 .type-picker .type-name { flex: 1; text-align: left; font-weight: 600; }
 .type-picker > .ico { color: var(--muted); }
 .chip {

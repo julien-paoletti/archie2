@@ -1,6 +1,6 @@
 import { overlaps, polylineCrossesRect } from '../engine/geometry.js';
 import { BORDER_WIDTHS, boundariesCrossed, busMembers, resolveType } from '../engine/schema.js';
-import { h, isEditable, kbd, popover, svg, ui } from './dom.js';
+import { h, isEditable, kbd, linkKindIcon, popover, svg, ui } from './dom.js';
 import { linkName, safeUrl, splitLinks } from './urls.js';
 
 let focusSeq = 0;
@@ -96,6 +96,20 @@ export function createInspector(editor, app, root, { icons, palette }) {
 
   const action = (icon, label, run, keys, cls = '') =>
     h('button', { type: 'button', class: 'btn-row ' + cls, onclick: run }, svg(ui[icon], { size: 15 }), h('span', {}, label), kbd(keys));
+
+  /** A link's kind, as a dropdown (like the element type picker): a line sample and the name. */
+  const kindPicker = (e) => {
+    const types = editor.schema.edgeTypes;
+    const et = types[e.type] ?? {};
+    const btn = h('button', { type: 'button', class: 'type-picker kind-picker' },
+      h('span', { class: 'chip kind' }, linkKindIcon(et)),
+      h('span', { class: 'type-name' }, et.label ?? e.type),
+      svg('M6 9l6 6 6-6', { size: 14 }));
+    btn.onclick = () => popover(btn, Object.entries(types).map(([k, v]) => [
+      linkKindIcon(v), v.label, () => editor.setEdgeType([e.id], k), null, { disabled: k === e.type },
+    ]));
+    return btn;
+  };
 
   const typePicker = (n) => {
     const t = resolveType(editor.schema, n);
@@ -272,7 +286,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
         svg(ui.dirLR, { size: 14 }),
         h('button', { type: 'button', class: 'end', onclick: () => editor.reveal(get().target) }, name(e.target)),
       )),
-      section('Kind', segmented(Object.entries(editor.schema.edgeTypes).map(([k, v]) => [k, v.label]), () => get()?.type, (v) => editor.setEdgeType([e.id], v))),
+      section('Kind', kindPicker(e)),
       crosses.length > 0 && section('Crosses', h('div', { class: 'conns' }, ...crosses.map((b) => {
         const bt = resolveType(editor.schema, b);
         return h('button', { type: 'button', class: 'conn', onclick: () => editor.reveal(b.id) },
