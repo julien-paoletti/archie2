@@ -29,7 +29,7 @@ You can also host it from any static server. It has no build step and no depende
 - **Fit to content:** press <kbd>F</kbd>, or double-click a resize handle, to shrink a module, boundary or host so it wraps its contents with no wasted space (nested ones included).
 - **Dependencies:** press <kbd>D</kbd> (or use the toolbar) and select an element: everything it depends on and everything depending on it stays lit, the rest fades back. Select two elements to see the paths between them.
 - **Collapsible modules:** click a module's chevron or press <kbd>C</kbd>. Links re-attach to the collapsed card, and neighbours shift to make room.
-- **Editing:** full undo/redo (a whole gesture is one step), copy/paste across tabs, grouping, align and distribute, inspector, command palette (<kbd>Ctrl/⌘ K</kbd>), context menus, help sheet (<kbd>?</kbd>).
+- **Editing:** full undo/redo (a whole gesture is one step), copy/paste across tabs, copy and paste style (<kbd>Ctrl/⌘ Alt C</kbd> / <kbd>V</kbd>), grouping, align and distribute, inspector, command palette (<kbd>Ctrl/⌘ K</kbd>), context menus, help sheet (<kbd>?</kbd>).
 - **Polish:** light and dark themes, eased hover and selection states, drop-target highlights, appear and disappear animations, and flow animation on focused links.
 - **Files:** in Chrome and Edge, <kbd>Ctrl/⌘ S</kbd> saves back into the file you opened or saved (File System Access API) instead of downloading a new copy; <kbd>Ctrl/⌘ Shift S</kbd> is Save as. A dot next to the title shows unsaved changes, and the file is remembered across reloads. Other browsers download the JSON. Everything also autosaves to `localStorage`, and you can export PNG or SVG.
 

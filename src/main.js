@@ -290,6 +290,7 @@ appCommands.forEach((c) => editor.registerCommand(c));
 
 editor.on('layout', () => toast('Auto layout applied', { icon: 'layout', action: { label: 'Undo', run: () => editor.undo() } }));
 editor.on('settings', () => app.savePrefs());
+editor.on('notice', ({ message, icon }) => toast(message, { icon }));
 
 // ── Clipboard: native events so copy/paste also works across tabs and windows.
 document.addEventListener('copy', (e) => {

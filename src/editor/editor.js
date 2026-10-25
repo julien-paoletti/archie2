@@ -45,6 +45,8 @@ export class Editor extends Emitter {
   /** Optional view that reports where text was drawn (set by the renderer). */
   layoutProbe = null;
   clipboard = null;
+  /** Copied look (Copy style / Paste style): { kind, type, style }. */
+  styleClip = null;
   tool = 'select';
   cursor = 'default';
   keys = { space: false };
@@ -1396,6 +1398,43 @@ export class Editor extends Emitter {
         const style = { ...o.style, ...patch };
         for (const k of Object.keys(style)) if (style[k] == null) delete style[k];
         this.doc.update(id, { style });
+      }
+    });
+  }
+
+  /** Short message for the user (the app shows it as a toast). */
+  notify(message, icon) {
+    this.emit('notice', { message, icon });
+  }
+
+  /**
+   * Copy the selected item's look: colour and text style for an element; colour, routing and
+   * kind for a link. Hand-made shapes (waypoints, label position) are not part of a style.
+   */
+  copyStyle() {
+    const id = this.singleSelected();
+    const o = id && this.doc.get(id);
+    if (!o) return;
+    const kind = this.doc.kindOf(id);
+    const text = this.isText(id);
+    const keys = kind === 'edge' ? ['color', 'routing'] : text ? ['color', 'textSize', 'align'] : ['color'];
+    this.styleClip = { kind, text, type: kind === 'edge' ? o.type : null, style: Object.fromEntries(keys.map((k) => [k, o.style?.[k] ?? null])) };
+    this.notify('Style copied: select others and paste it', 'copy');
+  }
+
+  /** Apply the copied style to the selection. Across kinds (element ↔ link, text ↔ box) only the colour carries over. */
+  pasteStyle() {
+    const clip = this.styleClip;
+    const ids = [...this.selection];
+    if (!clip || !ids.length) return;
+    this.doc.transact('Paste style', () => {
+      for (const id of ids) {
+        const kind = this.doc.kindOf(id);
+        const same = kind === clip.kind && (kind === 'edge' || this.isText(id) === clip.text);
+        const patch = same ? clip.style : { color: clip.style.color };
+        if (same && kind === 'edge') this.doc.update(id, { type: clip.type });
+        if (this.isText(id)) this.setTextStyle([id], patch);
+        else this.setStyle([id], patch);
       }
     });
   }

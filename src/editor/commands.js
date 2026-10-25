@@ -9,6 +9,9 @@ export function comboOf(e) {
   if (/^Digit\d$/.test(e.code ?? '')) key = e.code.slice(5);
   else if (/^Numpad\d$/.test(e.code ?? '')) key = e.code.slice(6);
   else key = (e.key ?? '').toLowerCase();
+  // Option on a Mac turns letters into other characters (⌥C types "ç"): fall back to the
+  // physical key then, but only then, so letters still follow the layout (AZERTY...).
+  if (key.length === 1 && !/[a-z0-9]/.test(key) && /^Key[A-Z]$/.test(e.code ?? '')) key = e.code.slice(3).toLowerCase();
   if (key === ' ') key = 'space';
   if (key === '+') key = '=';
   return [e.mod && 'mod', e.alt && 'alt', e.shift && 'shift', key].filter(Boolean).join('+');
@@ -34,6 +37,8 @@ export function createCommands(ed) {
     { id: 'edit.copy', title: 'Copy', group: 'Edit', keys: ['mod+c'], passive: true, run: () => ed.copy(), enabled: hasNodes },
     { id: 'edit.cut', title: 'Cut', group: 'Edit', keys: ['mod+x'], passive: true, run: () => ed.cut(), enabled: hasNodes },
     { id: 'edit.paste', title: 'Paste', group: 'Edit', keys: ['mod+v'], passive: true, run: () => ed.paste(), enabled: () => !!ed.clipboard },
+    { id: 'edit.copyStyle', title: 'Copy style', group: 'Edit', keys: ['mod+alt+c'], run: () => ed.copyStyle(), enabled: single },
+    { id: 'edit.pasteStyle', title: 'Paste style', group: 'Edit', keys: ['mod+alt+v'], run: () => ed.pasteStyle(), enabled: () => !!ed.styleClip && hasAny() },
     { id: 'edit.rename', title: 'Rename', group: 'Edit', keys: ['enter', 'f2'], run: () => ed.editLabel(ed.singleSelected()), enabled: single },
     {
       id: 'edit.stereotype', title: 'Edit type label / link protocol', group: 'Edit', keys: ['shift+enter', 'shift+f2'],
