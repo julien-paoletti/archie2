@@ -148,7 +148,7 @@ Unconnected siblings stack like a rank. Directions are `LR` and `TB`. On a 2,000
 - **Collapse/expand** behaves like an accordion: siblings entirely to the right or below shift by the size change, so expanding never overlaps neighbours. Auto layout treats a collapsed module as one node and leaves its contents alone.
 - **Commands** (`commands.js`): one registry drives keyboard shortcuts, the command palette, menus and the help sheet. Digits map by physical key (`code`) and letters by character (`key`), so shortcuts work on AZERTY and other layouts.
 - **Camera** (`camera.js`): an infinite canvas. Animated transitions interpolate zoom in log space. `insets` keep "fit" framing clear of floating panels.
-- **Modes and views** (view state, never in the document's history):
+- **Modes and views** (view state, never in the document's history). Each lives in its own module with its own state (`focus.js`, `views.js`, `flows.js`); `Editor` delegates to them, so callers use `editor.openView(...)`, `editor.flow`, `editor.focusDeps`:
   - **Dependency focus** (`focusDeps`, <kbd>D</kbd>): `dependencyFocus()` returns the nodes and links to keep lit for the selection; the renderer fades the rest.
   - **Flows** (`flow = { id, step, recording }`): recording turns link clicks into steps; playing (`step ≥ 0`) highlights one step, `flowFocus()` lights the flow, arrows step through.
   - **Module views** (`openView`, `viewUp`, `viewPath`): set the document scope. New or dropped things outside every box go into the view's module (`containerAt` falls back to it); context nodes are never re-parented.

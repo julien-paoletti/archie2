@@ -3,7 +3,6 @@ import { DiagramDocument, isMove, uid } from '../engine/document.js';
 import { History } from '../engine/history.js';
 import { EdgeRouter } from '../engine/router.js';
 import { layoutHierarchy } from '../engine/layout.js';
-import { dependencies, pathsBetween } from '../engine/analysis.js';
 import { legendEntries, legendHeight } from '../engine/legend.js';
 import {
   boundsOf, center, containsPoint, containsRect, dist, distToPolyline, distToSegment, inflate, overlaps, pointAlong,
@@ -16,6 +15,9 @@ import {
   SegmentGesture, WaypointGesture, cursorForHandle,
 } from './gestures.js';
 import { comboOf, createCommands } from './commands.js';
+import { DependencyFocus } from './focus.js';
+import { Flows } from './flows.js';
+import { Views } from './views.js';
 import { busMembers, isOverlay, resolveType, showsAsCard } from '../engine/schema.js';
 
 const DRAG_THRESHOLD = 4;
@@ -53,22 +55,14 @@ export class Editor extends Emitter {
   keys = { space: false };
   pointer = { x: 0, y: 0, world: { x: 0, y: 0 }, inside: false };
   overlay = { guides: [], gaps: [], sideMarks: [], marquee: null, connect: null, dropTarget: null, insertEdge: null };
-  /** Dependency focus: dim everything not upstream or downstream of the selection. */
-  focusDeps = false;
   /**
    * Read-only (presenting, view-only links): selecting, panning, zooming, hovering and the
    * dependency focus work; anything that would change the diagram does not.
    */
   readOnly = false;
-  /**
-   * The flow on show: its steps are numbered on the canvas. `step` ≥ 0 while playing (that
-   * step highlighted, the rest of the diagram dimmed); `recording`: clicking links adds steps.
-   */
-  flow = { id: null, step: -1, recording: false };
 
   #pasteCount = 0;
   #copyPoint = null;
-  #focusCache = { key: null, value: null };
   #legendGeometry = false;
   #legendsPending = false;
 
@@ -89,6 +83,10 @@ export class Editor extends Emitter {
     this.history = new History(this.doc, { capture: () => [...this.selection] });
     this.router = new EdgeRouter(this.doc);
     this.camera = new Camera();
+    // Modes with their own state, each in its own module (the editor delegates to them).
+    this.deps = new DependencyFocus(this);
+    this.flows = new Flows(this);
+    this.views = new Views(this);
 
     this.commands = new Map();
     this.keymap = new Map();
@@ -175,17 +173,8 @@ export class Editor extends Emitter {
     }
     if (this.portNode && !this.doc.nodes.has(this.portNode)) this.portNode = null;
     if (this.editingId && !this.doc.has(this.editingId)) this.endEdit();
-    // The open view's module may have gone (deleted, ungrouped, undone): back to everything.
-    if (this.viewRoot != null && !this.canShowView(this.viewRoot)) {
-      this.doc.setScope(null);
-      this.emit('view', null);
-    }
-    // The flow on show may have gone (undo) or lost steps.
-    if (this.flow.id) {
-      const f = this.doc.flows.get(this.flow.id);
-      if (!f) this.showFlow(null);
-      else if (this.flow.step >= f.steps.length) this.showFlow(f.id, { step: f.steps.length - 1, record: this.flow.recording });
-    }
+    this.views.sync();
+    this.flows.sync();
     this.emit('docchange', e);
     this.invalidate();
   }
@@ -260,7 +249,7 @@ export class Editor extends Emitter {
     return boundsOf(rects);
   }
 
-  // ───────────────────────────── dependency focus
+  // ───────────────────────────── modes: dependency focus, views, flows
 
   /**
    * Esc steps back one level: deselect, stop recording or playing a flow, leave the
@@ -268,221 +257,46 @@ export class Editor extends Emitter {
    */
   escape() {
     if (this.selection.size) this.setSelection([]);
-    else if (this.flow.recording) this.showFlow(this.flow.id);
-    else if (this.flow.step >= 0) this.showFlow(this.flow.id);
+    else if (this.flow.recording || this.flow.step >= 0) this.showFlow(this.flow.id);
     else if (this.focusDeps) this.toggleDependencies(false);
     else if (this.viewRoot != null) this.viewUp();
     else this.emit('escape');
   }
 
-  // ───────────────────────────── views
-
-  /** The module whose view is open (null: the whole diagram). */
-  get viewRoot() {
-    return this.doc.scope;
-  }
-
-  /** Can this node be opened as a view (a box holding things)? */
-  canOpenView(id) {
-    return this.canShowView(id) && this.doc.hasChildren(id) && id !== this.viewRoot;
-  }
-
-  /** Can an open view stay on this node (it may have been emptied meanwhile)? */
-  canShowView(id) {
-    const n = this.doc.nodes.get(id);
-    return !!n && this.doc.isContainer(n) && !showsAsCard(this.doc, n);
-  }
-
-  /**
-   * Open a module as its own view: its contents, plus what they link to outside it (faded,
-   * as context). Same model: editing here edits the diagram. null goes back to everything.
-   */
-  openView(id, { animate = true } = {}) {
-    if (id != null && !this.canOpenView(id)) return;
-    const n = id != null && this.doc.nodes.get(id);
-    if (n?.collapsed) this.toggleCollapse([id], false);
-    this.cancelGesture();
-    this.endEdit();
-    this.doc.setScope(id);
-    this.setSelection([]);
-    this.emit('view', this.viewRoot);
-    this.fitView({ animate });
-    this.invalidate();
-  }
-
-  /** Up one level: the view of the module around this one, or the whole diagram. */
-  viewUp() {
-    const root = this.viewRoot;
-    if (root == null) return;
-    const parent = this.doc.ancestors(root).find((a) => this.canOpenView(a));
-    const was = root;
-    this.openView(parent ?? null);
-    this.setSelection([was]);
-  }
-
-  /** The chain of modules from the top down to the open view (for a breadcrumb). */
-  viewPath() {
-    const root = this.viewRoot;
-    return root == null ? [] : [...this.doc.ancestors(root).reverse(), root].filter((id) => this.doc.isContainer(id));
-  }
-
-  /** Shown as context in the open view (outside it, linked to it). */
-  isContext(id) {
-    return this.viewRoot != null && this.doc.context().has(id);
-  }
-
-  /** Bounds of what is shown (the view, or everything). */
+  /** Bounds of what is shown (the open view, or everything). */
   visibleBounds() {
     const hidden = this.doc.hidden();
     return boundsOf([...this.doc.nodes.values()].filter((n) => !hidden.has(n.id)));
   }
 
-  // ───────────────────────────── flows
+  // Dependency focus (focus.js).
+  get focusDeps() { return this.deps.on; }
+  toggleDependencies(on) { this.deps.toggle(on); }
+  dependencyFocus() { return this.deps.sets(); }
 
-  /** Show a flow (null: none). `step` ≥ 0 plays it from that step; `record` adds clicked links. */
-  showFlow(id, { step = -1, record = false } = {}) {
-    const f = id && this.doc.flows.get(id);
-    this.flow = f
-      ? { id, step: f.steps.length ? Math.min(step, f.steps.length - 1) : -1, recording: record && !this.readOnly }
-      : { id: null, step: -1, recording: false };
-    this.emit('flow', this.flow);
-    this.invalidate();
-  }
+  // Module views (views.js).
+  get viewRoot() { return this.views.root; }
+  canOpenView(id) { return this.views.canOpen(id); }
+  canShowView(id) { return this.views.canShow(id); }
+  openView(id, opts) { this.views.open(id, opts); }
+  viewUp() { this.views.up(); }
+  viewPath() { return this.views.path(); }
+  isContext(id) { return this.views.isContext(id); }
 
-  playFlow(id = this.flow.id, from = 0) {
-    this.showFlow(id, { step: from });
-    const f = this.doc.flows.get(id);
-    if (f?.steps.length) this.#frameStep();
-  }
-
-  /** Move through the flow being played; the view follows the step. */
-  stepFlow(delta) {
-    const f = this.doc.flows.get(this.flow.id);
-    if (!f || this.flow.step < 0) return;
-    const step = Math.max(0, Math.min(f.steps.length - 1, this.flow.step + delta));
-    if (step === this.flow.step) return;
-    this.flow = { ...this.flow, step };
-    this.emit('flow', this.flow);
-    this.#frameStep();
-    this.invalidate();
-  }
-
-  /** Keep the current step's two ends in view. */
-  #frameStep() {
-    const s = this.currentStep();
-    if (!s) return;
-    const e = this.doc.edges.get(s.edge);
-    const ends = [e.source, e.target].map((id) => this.doc.nodes.get(this.doc.visibleAncestor(id)));
-    this.ensureVisible(boundsOf(ends));
-  }
-
-  /** The step being played: { edge, label, reverse, index }, or null. */
-  currentStep() {
-    const f = this.doc.flows.get(this.flow.id);
-    const s = f?.steps[this.flow.step];
-    return s ? { ...s, index: this.flow.step } : null;
-  }
-
-  createFlow(name) {
-    if (this.readOnly) return null;
-    let flow;
-    this.doc.transact('New flow', () => (flow = this.doc.addFlow({ name: name ?? `Flow ${this.doc.flows.size + 1}` })));
-    this.showFlow(flow.id, { record: true });
-    return flow;
-  }
-
-  addFlowStep(edgeId, flowId = this.flow.id) {
-    const f = this.doc.flows.get(flowId);
-    if (!f || !this.doc.edges.has(edgeId)) return;
-    this.doc.transact('Add step', () => this.doc.update(flowId, { steps: [...f.steps, { edge: edgeId, label: '' }] }));
-  }
-
-  /** Change a step: { label?, reverse? }; `merge` coalesces a typing session. */
-  updateFlowStep(flowId, index, patch, merge) {
-    const f = this.doc.flows.get(flowId);
-    if (!f?.steps[index]) return;
-    const steps = f.steps.map((s, i) => {
-      if (i !== index) return s;
-      const next = { ...s, ...patch };
-      if (!next.reverse) delete next.reverse;
-      return next;
-    });
-    this.doc.transact('Edit step', () => this.doc.update(flowId, { steps }), { merge });
-  }
-
-  removeFlowStep(flowId, index) {
-    const f = this.doc.flows.get(flowId);
-    if (!f?.steps[index]) return;
-    this.doc.transact('Remove step', () => this.doc.update(flowId, { steps: f.steps.filter((_, i) => i !== index) }));
-  }
-
-  moveFlowStep(flowId, index, delta) {
-    const f = this.doc.flows.get(flowId);
-    const to = index + delta;
-    if (!f?.steps[index] || to < 0 || to >= f.steps.length) return;
-    const steps = [...f.steps];
-    [steps[index], steps[to]] = [steps[to], steps[index]];
-    this.doc.transact('Reorder steps', () => this.doc.update(flowId, { steps }));
-  }
-
-  renameFlow(flowId, name, merge) {
-    if (this.doc.flows.has(flowId)) this.doc.transact('Rename flow', () => this.doc.update(flowId, { name }), { merge });
-  }
-
-  deleteFlow(flowId) {
-    if (this.flow.id === flowId) this.showFlow(null);
-    this.doc.transact('Delete flow', () => this.doc.remove([flowId]));
-  }
-
-  /**
-   * While a flow plays: its links and their ends stay lit (the rest dims), like the
-   * dependency focus. Returns { nodes, edges } or null.
-   */
-  flowFocus() {
-    const f = this.flow.step >= 0 && this.doc.flows.get(this.flow.id);
-    if (!f) return null;
-    const key = this.doc.version + '|flow|' + f.id;
-    if (this.#focusCache.key === key) return this.#focusCache.value;
-    const nodes = new Set(), edges = new Set();
-    for (const s of f.steps) {
-      const e = this.doc.edges.get(s.edge);
-      if (!e) continue;
-      edges.add(e.id);
-      for (const id of [e.source, e.target]) for (const n of [id, ...this.doc.ancestors(id)]) nodes.add(n);
-    }
-    const value = { nodes, edges };
-    this.#focusCache = { key, value };
-    return value;
-  }
-
-  toggleDependencies(on = !this.focusDeps) {
-    this.focusDeps = on;
-    this.emit('dependencies', on);
-    this.invalidate();
-  }
-
-  /**
-   * What the dependency focus keeps lit, or null when it is off or there is nothing to focus
-   * on. One selected node: everything it depends on and everything depending on it. Two:
-   * the paths between them. Lit nodes include their containers, so the context stays readable.
-   * Returns { nodes, edges, up?, down?, found? }; cached per document version and selection.
-   */
-  dependencyFocus() {
-    if (!this.focusDeps) return null;
-    const ids = this.selectedNodeIds();
-    const key = this.doc.version + '|' + ids.join(',');
-    if (this.#focusCache.key === key) return this.#focusCache.value;
-    let value = null;
-    if (ids.length === 1) value = dependencies(this.doc, ids[0]);
-    else if (ids.length === 2) value = pathsBetween(this.doc, ids[0], ids[1]);
-    if (value) {
-      const nodes = new Set(value.nodes);
-      for (const id of value.nodes) for (const a of this.doc.ancestors(id)) nodes.add(a);
-      value = { ...value, nodes };
-    }
-    this.#focusCache = { key, value };
-    return value;
-  }
+  // Request flows (flows.js).
+  get flow() { return this.flows.state; }
+  showFlow(id, opts) { this.flows.show(id, opts); }
+  playFlow(id, from) { this.flows.play(id, from); }
+  stepFlow(delta) { this.flows.step(delta); }
+  currentStep() { return this.flows.current(); }
+  createFlow(name) { return this.flows.create(name); }
+  addFlowStep(edgeId, flowId) { this.flows.addStep(edgeId, flowId); }
+  updateFlowStep(flowId, index, patch, merge) { this.flows.updateStep(flowId, index, patch, merge); }
+  removeFlowStep(flowId, index) { this.flows.removeStep(flowId, index); }
+  moveFlowStep(flowId, index, delta) { this.flows.moveStep(flowId, index, delta); }
+  renameFlow(flowId, name, merge) { this.flows.rename(flowId, name, merge); }
+  deleteFlow(flowId) { this.flows.remove(flowId); }
+  flowFocus() { return this.flows.focus(); }
 
   // ───────────────────────────── hit testing
 
