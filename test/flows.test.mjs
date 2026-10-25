@@ -6,8 +6,6 @@ import { architectureSchema, sampleDiagram } from '../src/domain/architecture.js
 import { flowToMermaidSequence } from '../src/domain/formats/sequence.js';
 import { sanitizeDiagram } from '../src/engine/schema.js';
 
-globalThis.performance ??= { now: () => Date.now() };
-
 test('flows live in the document: undoable, saved, and pruned with their links', () => {
   const doc = new DiagramDocument(architectureSchema);
   const history = new History(doc);

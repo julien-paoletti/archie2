@@ -1,7 +1,6 @@
 import { resolveType } from '../engine/schema.js';
 import { commandItem, h, kbd, keyText, popover, svg, ui } from './dom.js';
 import { inflate, union } from '../engine/geometry.js';
-import { ConnectGesture, DragGesture } from '../editor/gestures.js';
 
 const tip = (label, cmd, editor) => {
   const keys = cmd && editor.commands.get(cmd)?.keys?.[0];
@@ -62,11 +61,7 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
   const hand = iconButton('hand', tip('Pan  ·  or hold Space', 'tool.hand', editor), () => editor.setTool('hand'));
   const layout = h('button', { class: 'btn btn-label', type: 'button', 'data-tip': tip('Auto layout', 'arrange.layout', editor), onclick: () => editor.autoLayout() },
     svg(ui.layout), h('span', {}, 'Auto layout'));
-  const dir = iconButton('dirLR', 'Layout direction', () => {
-    editor.settings.layoutDirection = editor.settings.layoutDirection === 'LR' ? 'TB' : 'LR';
-    editor.emit('settings');
-    editor.autoLayout();
-  });
+  const dir = iconButton('dirLR', 'Layout direction', () => editor.run('arrange.layoutFlip'));
   const snapGrid = iconButton('grid', tip('Snap to grid', 'settings.snapGrid', editor), () => editor.toggleSetting('snapToGrid'));
   const guides = iconButton('guides', tip('Smart guides', 'settings.snapObjects', editor), () => editor.toggleSetting('snapToObjects'));
   const deps = iconButton('deps', tip('Show dependencies', 'view.dependencies', editor), () => editor.toggleDependencies());
@@ -106,7 +101,7 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
     }
     inspector.classList.toggle('on', app.inspectorOpen);
   };
-  for (const ev of ['history', 'tool', 'settings', 'focus']) editor.on(ev, sync);
+  for (const ev of ['history', 'tool', 'settings', 'dependencies']) editor.on(ev, sync);
   app.on('change', sync);
   sync();
 }
@@ -207,7 +202,7 @@ export function createPresentBar(editor, app, root) {
   };
   app.on('change', sync);
   app.on('title', sync);
-  editor.on('focus', sync);
+  editor.on('dependencies', sync);
   editor.on('docchange', sync);
   sync();
 }
@@ -354,10 +349,10 @@ export function createHints(editor, root) {
     const nodes = editor.selectedNodeIds();
     const edges = editor.selectedEdgeIds();
     let key, parts;
-    if (editor.gesture instanceof DragGesture) {
+    if (editor.gesture?.kind === 'drag') {
       key = 'drag';
       parts = [k('mod'), t('duplicate'), dot(), k('shift'), t('lock axis'), dot(), k('alt'), t('no snapping'), dot(), t('drop onto a module or host to nest')];
-    } else if (editor.gesture instanceof ConnectGesture) {
+    } else if (editor.gesture?.kind === 'connect') {
       key = 'connect';
       parts = [t('Release on a node to link'), dot(), t('on empty space to create one')];
     } else if (editor.flow.recording) {
@@ -408,7 +403,7 @@ export function createHints(editor, root) {
     el.replaceChildren(...parts.map(build));
     el.classList.add('in');
   };
-  for (const ev of ['selectionchange', 'gesture', 'docchange', 'focus', 'flow', 'view']) editor.on(ev, update);
+  for (const ev of ['selectionchange', 'gesture', 'docchange', 'dependencies', 'flow', 'view']) editor.on(ev, update);
   update();
 }
 

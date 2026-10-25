@@ -1,7 +1,7 @@
 import { resolveType, showsAsCard } from '../engine/schema.js';
 import { labelPoint } from '../engine/routing.js';
 import { h } from './dom.js';
-import { TEXT_PAD, TEXT_SIZES } from '../render/canvas-renderer.js';
+import { TEXT_PAD, TEXT_SIZES } from '../render/text.js';
 
 /**
  * In-place label editing: a transparent textarea laid exactly over the label area,

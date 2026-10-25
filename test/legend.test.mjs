@@ -4,8 +4,6 @@ import { DiagramDocument } from '../src/engine/document.js';
 import { legendEntries, legendHeight, LEGEND } from '../src/engine/legend.js';
 import { architectureSchema, sampleDiagram } from '../src/domain/architecture.js';
 
-globalThis.performance ??= { now: () => Date.now() };
-
 test('legend lists the kinds in use, by type label, with their usual colour', () => {
   const doc = new DiagramDocument(architectureSchema);
   doc.addNode({ id: 'a', type: 'service', data: { stereotype: 'Backend' } });

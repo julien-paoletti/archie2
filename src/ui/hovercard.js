@@ -1,6 +1,6 @@
 import { resolveType } from '../engine/schema.js';
 import { h, svg, ui } from './dom.js';
-import { linkName, safeUrl } from './links.js';
+import { linkName, safeUrl } from './urls.js';
 
 const DELAY = 550;
 

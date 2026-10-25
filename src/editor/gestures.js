@@ -6,7 +6,8 @@ import { insideRect, routeManual, sideOf } from '../engine/routing.js';
 /**
  * Pointer gestures. Each one owns the interaction from the moment the pointer passes the
  * drag threshold until release: `move(e)`, `up(e)`, `cancel()`. Continuous edits use a
- * history merge key so a whole gesture is a single undo step.
+ * history merge key so a whole gesture is a single undo step. `kind` names what a gesture
+ * does, for views that adapt to it (hints...).
  */
 
 const AUTOPAN_EDGE = 28;
@@ -27,6 +28,8 @@ function autopan(ed, e) {
 }
 
 export class PanGesture {
+  kind = 'pan';
+
   constructor(ed, e) {
     this.ed = ed;
     this.start = { x: e.x, y: e.y };
@@ -52,6 +55,8 @@ export class PanGesture {
  * mid-drag to switch between moving and copying. Alt disables snapping, Shift locks an axis.
  */
 export class DragGesture {
+  kind = 'drag';
+
   constructor(ed, press) {
     this.ed = ed;
     this.key = 'drag:' + uid('g');
@@ -193,6 +198,8 @@ const HANDLE_CURSORS = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-
 export const cursorForHandle = (h) => HANDLE_CURSORS[h] ?? 'default';
 
 export class ResizeGesture {
+  kind = 'resize';
+
   constructor(ed, press) {
     this.ed = ed;
     this.key = 'resize:' + uid('g');
@@ -276,6 +283,8 @@ export class ResizeGesture {
 }
 
 export class MarqueeGesture {
+  kind = 'marquee';
+
   constructor(ed, press) {
     this.ed = ed;
     this.cursor = 'crosshair';
@@ -310,6 +319,8 @@ export class MarqueeGesture {
 
 /** Drag from a port: drop on a node to link, drop on empty canvas to create a linked node. */
 export class ConnectGesture {
+  kind = 'connect';
+
   constructor(ed, press) {
     this.ed = ed;
     this.cursor = 'crosshair';
@@ -349,6 +360,8 @@ export class ConnectGesture {
 
 /** Drag a selected edge's endpoint onto another node. */
 export class ReconnectGesture {
+  kind = 'reconnect';
+
   constructor(ed, press) {
     this.ed = ed;
     this.cursor = 'crosshair';
@@ -448,6 +461,8 @@ function sideMarks(r, side, axis, c) {
 
 /** Drag a segment of an orthogonal link sideways; the route becomes hand-made. */
 export class SegmentGesture {
+  kind = 'segment';
+
   constructor(ed, press) {
     this.ed = ed;
     this.key = 'route:' + uid('g');
@@ -524,6 +539,8 @@ export class SegmentGesture {
 
 /** Move a waypoint of a straight/curved link, or insert one by dragging a leg. */
 export class WaypointGesture {
+  kind = 'waypoint';
+
   constructor(ed, press) {
     this.ed = ed;
     this.key = 'route:' + uid('g');
@@ -561,6 +578,8 @@ export class WaypointGesture {
 
 /** Slide a link's label along its path (magnetic at the middle). */
 export class LabelGesture {
+  kind = 'label';
+
   constructor(ed, press) {
     this.ed = ed;
     this.key = 'label:' + uid('g');

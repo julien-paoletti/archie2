@@ -52,8 +52,7 @@ export function createCommands(ed) {
     {
       id: 'arrange.layoutFlip', title: 'Auto layout (flip direction)', group: 'Arrange', keys: ['shift+l'],
       run: () => {
-        ed.settings.layoutDirection = ed.settings.layoutDirection === 'LR' ? 'TB' : 'LR';
-        ed.emit('settings');
+        ed.setSetting('layoutDirection', ed.settings.layoutDirection === 'LR' ? 'TB' : 'LR');
         ed.autoLayout();
       },
     },

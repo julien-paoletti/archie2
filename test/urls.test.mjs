@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { linkName, safeUrl, splitLinks } from '../src/ui/links.js';
+import { linkName, safeUrl, splitLinks } from '../src/ui/urls.js';
 
 test('only web links can be opened', () => {
   assert.equal(safeUrl('https://github.com/acme/api').href, 'https://github.com/acme/api');

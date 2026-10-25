@@ -99,6 +99,9 @@ export const ui = {
   deps: 'M7 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M21 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M21 19a2 2 0 1 1-4 0 2 2 0 0 1 4 0z M7 11l10-5 M7 13l10 5',
 };
 
+/** "1 link", "3 links". */
+export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
 export const isMac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
 
 const KEY_NAMES = {

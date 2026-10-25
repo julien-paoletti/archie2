@@ -5,8 +5,6 @@ import { architectureSchema } from '../src/domain/architecture.js';
 import { checkDiagram } from '../src/engine/checks.js';
 import { overlaps } from '../src/engine/geometry.js';
 
-globalThis.performance ??= { now: () => Date.now() };
-
 for (const t of templates) {
   test(`template "${t.title}" loads, lays out cleanly and passes the checks`, async () => {
     const { Editor } = await import('../src/editor/editor.js');

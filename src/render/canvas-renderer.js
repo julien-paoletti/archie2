@@ -3,19 +3,14 @@ import { boundsOf, clamp, dist, inflate, intersects, lerpRect, pointAlong, union
 import { SIDES, labelPoint, routeEdge, routeSimpleOrthogonal, sideNormal } from '../engine/routing.js';
 import { LEGEND, legendEntries } from '../engine/legend.js';
 import { SVGContext } from './svg-context.js';
+import { TEXT_PAD, TEXT_SIZES } from './text.js';
 import { withAlpha } from './theme.js';
 
 const FONT = '"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", "Cascadia Code", Consolas, Menlo, monospace';
-/** Free-text sizes: S, M, L and a bold title. */
-export const TEXT_SIZES = {
-  sm: { size: 12, lh: 16, weight: 500 },
-  md: { size: 14, lh: 20, weight: 500 },
-  lg: { size: 18, lh: 24, weight: 600 },
-  xl: { size: 26, lh: 32, weight: 700 },
-};
-export const TEXT_PAD = 4;
 const GEOM = ['x', 'y', 'w', 'h'];
+/** How far the dependency focus or a playing flow fades what it leaves out, and context of a view. */
+const FADE = 0.82, CONTEXT = 0.55;
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 const easeOutBack = (t) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
 
@@ -424,10 +419,16 @@ export class CanvasRenderer {
   /** Opacity under the dependency focus: whatever it leaves out fades back. */
   #fade(id, kind) {
     // Context of a view (outside it, linked to it): shown, but quieter, exports included.
-    const context = kind === 'node' && this.ed.isContext(id) ? 0.55 : 1;
+    const context = kind === 'node' && this.ed.isContext(id) ? CONTEXT : 1;
     if (this.#exporting) return context;
     const lit = !this.#focus || (kind === 'edge' ? this.#focus.edges : this.#focus.nodes).has(id);
-    return context * (1 - 0.82 * this.#fx.value('f' + id, lit ? 0 : 1, 14));
+    return context * (1 - FADE * this.#fx.value('f' + id, lit ? 0 : 1, 14));
+  }
+
+  /** The same, for a second pass over something already drawn this frame (tabs, tags). */
+  #fadeAgain(id, kind) {
+    const context = kind === 'node' && this.ed.isContext(id) ? CONTEXT : 1;
+    return context * (1 - FADE * this.#peek('f' + id));
   }
 
   #state(id, kind) {
@@ -609,7 +610,7 @@ export class CanvasRenderer {
     const color = n.style?.color ?? type.color ?? this.theme.accent;
     const { hs, ss } = part === 'outline' ? this.#state(n.id, 'node') : { hs: this.#peek('h' + n.id), ss: this.#peek('s' + n.id) };
     ctx.save();
-    ctx.globalAlpha = easeOut(this.#appearT(n.id)) * (part === 'outline' ? this.#fade(n.id, 'node') : 1 - 0.82 * this.#peek('f' + n.id));
+    ctx.globalAlpha = easeOut(this.#appearT(n.id)) * (part === 'outline' ? this.#fade(n.id, 'node') : this.#fadeAgain(n.id, 'node'));
     this.#drawBoundary(ctx, n, r, type, color, hs, ss, 0, { outline: part === 'outline', tab: part === 'tab', overlay: true });
     ctx.restore();
   }
@@ -1328,7 +1329,7 @@ export class CanvasRenderer {
     const sel = !this.#exporting && this.ed.selection.has(e.id);
     const { x, y } = at;
     ctx.save();
-    ctx.globalAlpha = 1 - 0.82 * this.#peek('f' + e.id);
+    ctx.globalAlpha = this.#fadeAgain(e.id, 'edge');
     const two = !!(text && proto);
     const ly = two ? y - 7 : y, py = two ? y + 8 : y;
     this.#labels.set(e.id, { x: x - w / 2, y: y - h / 2, w, h, line: { x: x - 100, y: ly - 10, w: 200, h: 20 } });

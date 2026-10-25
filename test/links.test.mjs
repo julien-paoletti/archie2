@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { routeCurved, sideOf, spreadPorts } from '../src/engine/routing.js';
 
-globalThis.performance ??= { now: () => Date.now() };
-
 const schema = {
   defaultNodeType: 'box',
   defaultEdgeType: 'link',

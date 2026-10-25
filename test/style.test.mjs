@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { comboOf } from '../src/editor/commands.js';
 
-globalThis.performance ??= { now: () => Date.now() };
-
 const schema = {
   defaultNodeType: 'box',
   defaultEdgeType: 'uses',

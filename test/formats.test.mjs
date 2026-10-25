@@ -152,7 +152,6 @@ test('Mermaid in Markdown is found; plain text is not Mermaid', async () => {
 });
 
 test('editor: an imported model is laid out, placed at the pointer and undone in one step', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema: architectureSchema });
   ed.resize(1200, 800);

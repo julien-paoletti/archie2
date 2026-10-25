@@ -1,7 +1,7 @@
 import { overlaps, polylineCrossesRect } from '../engine/geometry.js';
-import { boundariesCrossed, busMembers, isOverlay, resolveType } from '../engine/schema.js';
+import { boundariesCrossed, busMembers, resolveType } from '../engine/schema.js';
 import { h, isEditable, kbd, popover, svg, ui } from './dom.js';
-import { linkName, safeUrl, splitLinks } from './links.js';
+import { linkName, safeUrl, splitLinks } from './urls.js';
 
 let focusSeq = 0;
 
@@ -381,7 +381,7 @@ export function createInspector(editor, app, root, { icons, palette }) {
       ),
       section('Auto layout',
         segmented([['LR', 'Left → right', ui.dirLR], ['TB', 'Top → bottom', ui.dirTB]], () => editor.settings.layoutDirection,
-          (v) => { editor.settings.layoutDirection = v; editor.emit('settings'); }),
+          (v) => editor.setSetting('layoutDirection', v)),
         h('div', { class: 'actions' }, action('layout', 'Arrange diagram', () => editor.autoLayout(), 'l'))),
       section(null, h('p', { class: 'muted small' }, 'Select something to edit its properties.')),
     ];
@@ -607,7 +607,7 @@ export function createSelectionBar(editor, app, root, { palette }) {
     place();
   };
   editor.on('selectionchange', rebuild);
-  editor.on('focus', rebuild);
+  editor.on('dependencies', rebuild);
   editor.on('docchange', () => {
     if (editor.selection.size && !editor.gesture) rebuild();
   });

@@ -1,6 +1,6 @@
 # Archie: editor engine architecture
 
-Archie is a static, dependency-free web app (ES modules, no build step). The code has four layers. Each one only depends on the layers below it.
+Archie is a static, dependency-free web app (ES modules, no build step). The code has four layers. Each one only depends on the layers below it; `domain/` (the schema, templates and text formats) sits beside the engine and may use its helpers.
 
 ```text
  ui/       DOM chrome: toolbar, dock, inspector, palette, menus, label editor, minimap,
@@ -41,7 +41,7 @@ edge = { id, type, source, target, label, data: {}, style: { routing?, points?, 
 flow = { id, name, steps: [{ edge, label, reverse? }] }   // a request scenario over links
 ```
 
-- Element details live in `data`: `description`, `owner`, `status` (`planned` / `deprecated`), `links` (URLs, opened only if http(s): `ui/links.js`).
+- Element details live in `data`: `description`, `owner`, `status` (`planned` / `deprecated`), `links` (URLs, opened only if http(s): `ui/urls.js`).
 - Flows are a third kind in the document (`k: 'flow'` ops), so they undo, save and share like the rest. Removing a link removes its steps in the same transaction.
 - `doc.setScope(id)` limits what is shown to a module's contents plus their direct neighbours (`doc.context()`), for module views. It is view state: not undoable, not in the patches.
 
@@ -152,9 +152,9 @@ Unconnected siblings stack like a rank. Directions are `LR` and `TB`. On a 2,000
   - **Dependency focus** (`focusDeps`, <kbd>D</kbd>): `dependencyFocus()` returns the nodes and links to keep lit for the selection; the renderer fades the rest.
   - **Flows** (`flow = { id, step, recording }`): recording turns link clicks into steps; playing (`step ≥ 0`) highlights one step, `flowFocus()` lights the flow, arrows step through.
   - **Module views** (`openView`, `viewUp`, `viewPath`): set the document scope. New or dropped things outside every box go into the view's module (`containerAt` falls back to it); context nodes are never re-parented.
-  - **Read-only** (`setReadOnly`, presenting and view-only links): drags pan, and only commands of the View group or flagged `readOnly` run (`allowed(cmd)`).
+  - **Read-only** (`setReadOnly`, presenting and view-only links): drags pan, and only commands of the View group or flagged `readOnly` run (`allowed(cmd)`). The document is locked too (`doc.locked`): it refuses any transaction not flagged `force` (collapsing, legend sizing), whatever path tries.
   - `escape()` steps back one level through all of these: selection, flow, focus, view, then emits `escape` for the app.
-- **Events** the UI listens to: `invalidate`, `selectionchange`, `docchange`, `history`, `hover`, `gesture`, `camera`, `cursor`, `tool`, `settings`, `edit-label`, `edit-end`, `commit-edit`, `contextmenu`, `layout`, `notice` (a toast), `focus`, `flow`, `view`, `readonly`, `escape`.
+- **Events** the UI listens to: `invalidate`, `selectionchange`, `docchange`, `history`, `hover`, `gesture`, `camera`, `cursor`, `tool`, `settings`, `edit-label`, `edit-end`, `commit-edit`, `contextmenu`, `layout`, `notice` (a toast), `dependencies` (the focus mode toggled), `flow`, `view`, `escape`.
 
 ## Renderer (`src/render`)
 

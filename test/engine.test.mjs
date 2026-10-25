@@ -255,7 +255,6 @@ test('collapsed containers: hidden descendants, proxy endpoints, layout as a lea
 });
 
 test('editor: collapse/expand shifts neighbours like an accordion and undoes in one step', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema: { ...schema, groupType: 'group', edgeTypes: {} } });
   ed.doc.addNode({ id: 'g', type: 'group', x: 0, y: 0, w: 300, h: 200 });
@@ -276,7 +275,6 @@ test('editor: collapse/expand shifts neighbours like an accordion and undoes in 
 });
 
 test('dragging a vertical link past the nodes turns it into a side bracket', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { SegmentGesture } = await import('../src/editor/gestures.js');
   const ed = new Editor({ schema: { ...schema, edgeTypes: {} } });
@@ -330,7 +328,6 @@ test('boundaries: variants resolve visuals, crossings are found through nesting'
 });
 
 test('editor: wrap selection in a boundary variant', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { architectureSchema } = await import('../src/domain/architecture.js');
   const ed = new Editor({ schema: architectureSchema });
@@ -346,7 +343,6 @@ test('editor: wrap selection in a boundary variant', async () => {
 });
 
 test('editor: Ctrl+drag drops a copy, toggling Ctrl mid-drag switches copy/move', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { DragGesture } = await import('../src/editor/gestures.js');
   const ed = new Editor({ schema: { ...schema, edgeTypes: {} } });
@@ -380,7 +376,6 @@ test('editor: Ctrl+drag drops a copy, toggling Ctrl mid-drag switches copy/move'
 });
 
 test('editor: type labels replace the type caption, can be cleared, and are suggested', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema: { ...schema, edgeTypes: {} } });
   ed.resize(1000, 800);
@@ -407,7 +402,6 @@ test('editor: type labels replace the type caption, can be cleared, and are sugg
 });
 
 test('hosts: server/VM/container are cards until something is dropped in, then grow around it', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { DragGesture } = await import('../src/editor/gestures.js');
   const { architectureSchema } = await import('../src/domain/architecture.js');
@@ -443,7 +437,6 @@ test('hosts: server/VM/container are cards until something is dropped in, then g
 });
 
 test('editor: fit to content wraps contents snugly, innermost first, in one undo step', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema: { ...schema, edgeTypes: {} } });
   const { containerPadding: pad, containerHeader: head } = ed.settings;
@@ -471,7 +464,6 @@ test('editor: fit to content wraps contents snugly, innermost first, in one undo
 });
 
 test('editor: link protocol can be set, cleared, edited in place, and makes the tag clickable', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema: { ...schema, edgeTypes: {} } });
   ed.resize(1600, 1000);
@@ -495,7 +487,6 @@ test('editor: link protocol can be set, cleared, edited in place, and makes the 
 });
 
 test('editor: route grips step aside from the link tag instead of covering it', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema: { ...schema, edgeTypes: {} } });
   ed.resize(1600, 1000);
@@ -521,7 +512,6 @@ test('editor: route grips step aside from the link tag instead of covering it', 
 });
 
 test('network bus: attachments drop straight onto it, across modules; bus stretches to its members', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { architectureSchema } = await import('../src/domain/architecture.js');
   const { busMembers } = await import('../src/engine/schema.js');
@@ -548,7 +538,6 @@ test('network bus: attachments drop straight onto it, across modules; bus stretc
 });
 
 test('border-only boundaries: surround without containing, hit on outline only, re-wrap after layout', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { architectureSchema } = await import('../src/domain/architecture.js');
   const { boundariesCrossed } = await import('../src/engine/schema.js');
@@ -596,7 +585,6 @@ function containsAll(o, nodes) {
 }
 
 test('firewall: dropped onto a link it is put in its path, in one undo step', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { DragGesture } = await import('../src/editor/gestures.js');
   const { architectureSchema } = await import('../src/domain/architecture.js');
@@ -658,7 +646,6 @@ test('routing: close elements always get an end segment long enough to show the 
 
 test('routing: stale hand-made bends never make a link run through its own ends', async () => {
   const { routeManual } = await import('../src/engine/routing.js');
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { architectureSchema } = await import('../src/domain/architecture.js');
   const inside = (n, q) => q.x > n.x + 0.5 && q.x < n.x + n.w - 0.5 && q.y > n.y + 0.5 && q.y < n.y + n.h - 0.5;
@@ -687,7 +674,6 @@ test('routing: stale hand-made bends never make a link run through its own ends'
 });
 
 test('free text: stays where placed, no links, refits on edit, removed when emptied', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const { architectureSchema } = await import('../src/domain/architecture.js');
   const ed = new Editor({ schema: architectureSchema });

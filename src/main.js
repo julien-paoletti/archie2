@@ -18,7 +18,7 @@ import { extractMermaid, fromMermaid, looksLikeMermaid, toMermaid } from './doma
 import { toPlantUML } from './domain/formats/plantuml.js';
 import { toStructurizr } from './domain/formats/structurizr.js';
 import { toMarkdown } from './domain/formats/markdown.js';
-import { isEditable } from './ui/dom.js';
+import { isEditable, plural } from './ui/dom.js';
 import * as files from './ui/files.js';
 import { decodeDiagram, encodeDiagram, parseShareHash } from './ui/share.js';
 import { sanitizeDiagram } from './engine/schema.js';
@@ -380,11 +380,14 @@ applyTheme();
 
 // Keep fit/zoom-to framing clear of the floating panels (presenting hides most of them).
 const updateInsets = () => {
+  // The inspector's width comes from CSS (and its breakpoints): measure it, plus its margins.
+  const inspector = document.querySelector('.inspector');
   editor.camera.insets = app.presenting
     ? { top: 72, left: 24, right: 24, bottom: 24 }
-    : { top: 64, left: 64, right: app.inspectorOpen && innerWidth > 700 ? 312 : 0, bottom: 52 };
+    : { top: 64, left: 64, right: app.inspectorOpen ? (inspector?.offsetWidth || 288) + 24 : 0, bottom: 52 };
 };
 app.on('change', updateInsets);
+addEventListener('resize', updateInsets);
 updateInsets();
 
 const resize = () => {
@@ -434,6 +437,7 @@ createHints(editor, root);
 createInspector(editor, app, root, { icons, palette });
 createSelectionBar(editor, app, root, { palette });
 createHoverCard(editor, root, { icons });
+updateInsets();
 createContextMenu(editor, app, { icons });
 const toast = createToaster(root);
 const palette_ = createCommandPalette(editor, app, { icons });
@@ -589,8 +593,6 @@ function download(blob, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function slug(s) {
   return (s || 'diagram').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'diagram';

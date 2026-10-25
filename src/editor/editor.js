@@ -140,7 +140,6 @@ export class Editor extends Emitter {
     this.readOnly = on;
     this.doc.locked = on;
     this.portNode = null;
-    this.emit('readonly', on);
     this.invalidate();
   }
 
@@ -151,7 +150,13 @@ export class Editor extends Emitter {
   }
 
   toggleSetting(key) {
-    this.settings[key] = !this.settings[key];
+    this.setSetting(key, !this.settings[key]);
+  }
+
+  /** Change a setting and tell the views (the only way settings should change). */
+  setSetting(key, value) {
+    if (this.settings[key] === value) return;
+    this.settings[key] = value;
     this.emit('settings');
   }
 
@@ -452,7 +457,7 @@ export class Editor extends Emitter {
 
   toggleDependencies(on = !this.focusDeps) {
     this.focusDeps = on;
-    this.emit('focus', on);
+    this.emit('dependencies', on);
     this.invalidate();
   }
 

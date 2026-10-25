@@ -1,5 +1,5 @@
 import { RULES, checkDiagram } from '../engine/checks.js';
-import { dismissable, h, svg, ui } from './dom.js';
+import { dismissable, h, plural, svg, ui } from './dom.js';
 
 const SHOWN_PER_RULE = 40;
 
@@ -77,5 +77,3 @@ export function createChecks(editor) {
   refresh();
   return button;
 }
-
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;

@@ -53,7 +53,6 @@ test('paths between two nodes, in either direction', () => {
 });
 
 test('editor dependency focus lights containers of lit nodes and follows the selection', async () => {
-  globalThis.performance ??= { now: () => Date.now() };
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema: { ...schema, edgeTypes: {} } });
   ed.doc.load(shop().toJSON());

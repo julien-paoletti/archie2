@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { DiagramDocument } from '../src/engine/document.js';
 import { architectureSchema, sampleDiagram } from '../src/domain/architecture.js';
 
-globalThis.performance ??= { now: () => Date.now() };
-
 const sorted = (set) => [...set].sort();
 
 test('a scoped document shows a module, its contents and their direct neighbours', () => {

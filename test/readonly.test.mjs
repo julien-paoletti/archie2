@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { architectureSchema } from '../src/domain/architecture.js';
 
-globalThis.performance ??= { now: () => Date.now() };
-
 async function editor() {
   const { Editor } = await import('../src/editor/editor.js');
   const ed = new Editor({ schema: architectureSchema });
