@@ -62,3 +62,29 @@ test('read-only: Esc deselects, leaves the focus, then asks the app to stop pres
   drag(ed, { x: 200, y: 136 }, { x: 260, y: 136 });
   assert.ok(ed.doc.getNode('a').x > 100, 'editing again once read-only is off');
 });
+
+test('read-only: the document itself refuses edits, whatever path they take', async () => {
+  const ed = await editor();
+  ed.setReadOnly(false);
+  ed.doc.addNode({ id: 'm', type: 'module', x: 0, y: 300, w: 400, h: 200 });
+  ed.doc.transact('x', () => ed.doc.update('a', { parent: 'm' }));
+  ed.setReadOnly(true);
+  const v0 = ed.doc.version;
+  ed.setSelection(['a', 'b']);
+  ed.setStyle(['a'], { color: '#ef4444' });
+  ed.moveNodes(['a'], 50, 0);
+  ed.deleteSelection();
+  assert.equal(ed.group(), undefined);
+  assert.equal(ed.createNode('service', { x: 0, y: 0 }), null);
+  assert.equal(ed.quickAdd('a'), null);
+  assert.deepEqual(ed.importModel({ nodes: [{ id: 'z' }], edges: [] }), []);
+  assert.equal(ed.createFlow(), null);
+  ed.setData('a', 'owner', 'me');
+  ed.reverseEdges(['e']);
+  assert.equal(ed.doc.version, v0, 'nothing changed');
+  ed.toggleCollapse(['m']);
+  assert.equal(ed.doc.getNode('m').collapsed, true, 'collapsing (to look) still works');
+  ed.setReadOnly(false);
+  ed.setStyle(['a'], { color: '#ef4444' });
+  assert.equal(ed.doc.getNode('a').style.color, '#ef4444', 'unlocked again');
+});

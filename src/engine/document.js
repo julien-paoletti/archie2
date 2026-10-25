@@ -284,10 +284,19 @@ export class DiagramDocument extends Emitter {
   }
 
   /**
+   * Locked (read-only viewing): transactions are refused, quietly, unless `force` says the
+   * change is not an edit (collapsing to look inside, derived sizes). One guard for every
+   * path that could change the document, whatever the UI forgot to hide.
+   */
+  locked = false;
+
+  /**
    * Run `fn` as one atomic, undoable unit. Nested calls join the outer transaction.
-   * opts: { merge?: key (history coalescing), animate?: bool, history?: false, source?: string }
+   * opts: { merge?: key (history coalescing), animate?: bool, history?: false, source?: string, force?: bool }
+   * Returns what `fn` returns; undefined when refused (locked).
    */
   transact(label, fn, opts = {}) {
+    if (this.locked && !opts.force && !this.#tx) return undefined;
     if (this.#tx) {
       if (opts.animate) this.#tx.opts.animate = true;
       return fn(this);

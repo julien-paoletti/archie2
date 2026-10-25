@@ -138,6 +138,7 @@ export class Editor extends Emitter {
     this.cancelGesture();
     this.endEdit();
     this.readOnly = on;
+    this.doc.locked = on;
     this.portNode = null;
     this.emit('readonly', on);
     this.invalidate();
@@ -205,7 +206,7 @@ export class Editor extends Emitter {
     this.#legendGeometry = sections.geometryMatters;
     const h = legendHeight(sections);
     const stale = legends.filter((n) => n.h !== h);
-    if (stale.length) this.doc.transact('Legend', () => stale.forEach((n) => this.doc.update(n.id, { h })), { history: false });
+    if (stale.length) this.doc.transact('Legend', () => stale.forEach((n) => this.doc.update(n.id, { h })), { history: false, force: true });
   }
 
   // ───────────────────────────── selection
@@ -378,6 +379,7 @@ export class Editor extends Emitter {
   }
 
   createFlow(name) {
+    if (this.readOnly) return null;
     let flow;
     this.doc.transact('New flow', () => (flow = this.doc.addFlow({ name: name ?? `Flow ${this.doc.flows.size + 1}` })));
     this.showFlow(flow.id, { record: true });
@@ -1104,6 +1106,7 @@ export class Editor extends Emitter {
   }
 
   createNode(type, at, { edit = false, parent, label, select = true } = {}) {
+    if (this.readOnly) return null;
     const t = this.schema.nodeTypes[type];
     if (!t) return null;
     const g = this.settings.snapToGrid ? this.settings.grid : 0;
@@ -1163,6 +1166,7 @@ export class Editor extends Emitter {
   }
 
   connect(sourceId, targetId, { type = this.#linkType(sourceId, targetId) } = {}) {
+    if (this.readOnly) return null;
     let edge;
     this.doc.transact('Connect', () => {
       edge = this.doc.addEdge({ type, source: sourceId, target: targetId });
@@ -1184,6 +1188,7 @@ export class Editor extends Emitter {
 
   /** Create a node at a point, linked from `sourceId` (drop of a connection on empty canvas). */
   createLinkedNode(sourceId, at) {
+    if (this.readOnly) return null;
     const src = this.doc.nodes.get(sourceId);
     if (!src) return null;
     const type = this.#spawnType(src);
@@ -1199,6 +1204,7 @@ export class Editor extends Emitter {
 
   /** One-click "grow": add a node of the same kind next to `sourceId`, linked, in a free spot. */
   quickAdd(sourceId, side = this.settings.layoutDirection === 'TB' ? 'bottom' : 'right') {
+    if (this.readOnly) return null;
     const src = this.doc.nodes.get(sourceId);
     if (!src) return null;
     const type = this.#spawnType(src);
@@ -1312,7 +1318,7 @@ export class Editor extends Emitter {
         this.#accordion(n, old);
       }
       this.fitContainers(expanding);
-    }, { animate: true });
+    }, { animate: true, force: true });  // collapsing is a way of looking: allowed while viewing
     this.setSelection([...this.selection]);
   }
 
@@ -1448,6 +1454,7 @@ export class Editor extends Emitter {
    * components in different modules that share an isolated network). Nothing is re-parented.
    */
   outlineSelection(variant) {
+    if (this.readOnly) return undefined;
     const nodes = this.topLevel(this.selectedNodeIds()).map((id) => this.doc.nodes.get(id));
     const type = Object.keys(this.schema.nodeTypes).find((k) => this.schema.nodeTypes[k].boundary);
     if (!nodes.length || !type) return;
@@ -1482,6 +1489,7 @@ export class Editor extends Emitter {
 
   /** Wrap the selection in a new container (a module by default, or e.g. a boundary). */
   group(type = this.schema.groupType, data = {}) {
+    if (this.readOnly) return undefined;
     const ids = this.topLevel(this.selectedNodeIds());
     if (!ids.length) return;
     const { containerPadding: pad, containerHeader: head } = this.settings;
@@ -1536,6 +1544,7 @@ export class Editor extends Emitter {
 
   /** Insert a snapshot with fresh ids, offset by (dx, dy). Returns the new top-level ids. */
   insertSnapshot(snap, dx, dy, parentFor = (n) => n.parent) {
+    if (this.readOnly) return [];
     const map = new Map(snap.nodes.map((n) => [n.id, uid('n')]));
     const top = [];
     this.doc.transact('Paste', () => {
@@ -1564,6 +1573,7 @@ export class Editor extends Emitter {
    * out on its own, then inserted centred on `at` as one undoable step, and selected.
    */
   importModel(model, { at = this.insertionPoint(), direction = this.settings.layoutDirection } = {}) {
+    if (this.readOnly) return [];
     const scratch = new DiagramDocument(this.schema);
     scratch.load(model);
     const rects = layoutHierarchy(scratch, { direction, padding: this.settings.containerPadding, header: this.settings.containerHeader });
