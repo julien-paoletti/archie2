@@ -93,7 +93,7 @@ export function routeManual(mode, src, tgt, points) {
   return crossesRects(route.poly, [src, tgt]) ? null : route;
 }
 
-const insideRect = (r, p) => p.x > r.x + 0.5 && p.x < r.x + r.w - 0.5 && p.y > r.y + 0.5 && p.y < r.y + r.h - 0.5;
+export const insideRect = (r, p) => p.x > r.x + 0.5 && p.x < r.x + r.w - 0.5 && p.y > r.y + 0.5 && p.y < r.y + r.h - 0.5;
 
 /** Does a polyline run through the interior of any of the rects (ends on borders are fine)? */
 function crossesRects(poly, rects) {
@@ -430,7 +430,8 @@ export function sideOf(r, p) {
  * Fan out edge ends that share a node side so parallel links don't overlap.
  * `items` are `{ id, route, source, target }` (rects). Ends are ordered by where the
  * edge heads, which avoids introducing crossings. Only the first/last segments move,
- * so orthogonal routes stay orthogonal. Returns Map<id, adjusted route>.
+ * so orthogonal routes stay orthogonal; a curve's end moves with its control point, so it
+ * still leaves the side square. Returns Map<id, adjusted route>.
  */
 export function spreadPorts(items, { maxGap = 18 } = {}) {
   const groups = new Map();
@@ -441,7 +442,7 @@ export function spreadPorts(items, { maxGap = 18 } = {}) {
   };
   for (const it of items) {
     const pts = it.route.points;
-    if (it.route.kind !== 'poly' || it.route.manual || it.route.straight || pts.length < 2 || it.source === it.target) continue;
+    if (it.route.manual || it.route.straight || pts.length < 2 || it.source === it.target) continue;
     const s = sideOf(it.source, pts[0]);
     const t = sideOf(it.target, pts[pts.length - 1]);
     if (s) add(it.sourceId + '|' + s, { it, end: 0, side: s, rect: it.source, far: pts[Math.min(2, pts.length - 1)] });
@@ -469,6 +470,7 @@ export function spreadPorts(items, { maxGap = 18 } = {}) {
       if (alongX) pts[i].x += off;
       else pts[i].y += off;
     };
+    const bezier = it.route.kind === 'bezier';
     if (pts.length === 2) {
       // Straight shot between facing sides: add a jog so both ends can move independently.
       const [a, b] = pts;
@@ -479,7 +481,7 @@ export function spreadPorts(items, { maxGap = 18 } = {}) {
     const n = pts.length;
     if (s) { shift(0, s); shift(1, s); }
     if (t) { shift(n - 1, t); shift(n - 2, t); }
-    out.set(it.id, finish('poly', simplify(pts)));
+    out.set(it.id, bezier ? finish('bezier', pts) : finish('poly', simplify(pts)));
   }
   return out;
 }

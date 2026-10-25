@@ -315,8 +315,10 @@ export class Editor extends Emitter {
       return { kind: 'toggle', id: box.id };
     }
 
+    // Labels first; then, where links run close together, the selected one (you are working
+    // on it), else the nearest, else the one drawn on top (later in the list).
     const tol = EDGE_HIT / z;
-    let best = null, bestD = tol;
+    let best = null, bestD = tol, selected = null;
     for (const e of this.doc.edges.values()) {
       const r = this.router.peek(e.id);
       if (!r) continue;
@@ -333,11 +335,13 @@ export class Editor extends Emitter {
       const bb = r.bbox;
       if (p.x < bb.x - tol || p.x > bb.x + bb.w + tol || p.y < bb.y - tol || p.y > bb.y + bb.h + tol) continue;
       const d = distToPolyline(p, r.poly);
+      if (e.id === single && d <= tol) selected = { e, r };
       if (d <= bestD) {
         bestD = d;
         best = { e, r };
       }
     }
+    best = selected ?? best;
     if (best) {
       const { e, r } = best;
       const seg = nearestSegment(p, r.poly);

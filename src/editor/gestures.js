@@ -1,7 +1,7 @@
 import { snapRect, applyEdges } from '../engine/snapping.js';
 import { boundsOf, clamp, containsRect, dist, inflate, projectOnPolyline, rectFromPoints, snap } from '../engine/geometry.js';
 import { uid } from '../engine/document.js';
-import { sideOf } from '../engine/routing.js';
+import { insideRect, routeManual, sideOf } from '../engine/routing.js';
 
 /**
  * Pointer gestures. Each one owns the interaction from the moment the pointer passes the
@@ -404,6 +404,24 @@ const setStyle = (ed, id, patch, merge) => {
 };
 
 /**
+ * At the end of a reshape: waypoints left inside either end are never drawn, so drop them;
+ * if what remains can't be drawn either, go back to automatic routing. Otherwise the link
+ * would keep an invisible shape that springs back when an element moves.
+ */
+function dropStaleWaypoints(ed, id, merge) {
+  const e = ed.doc.edges.get(id);
+  const pts = e?.style?.points;
+  if (!pts?.length) return;
+  const end = (n) => ed.doc.nodes.get(ed.doc.visibleAncestor(n));
+  const s = end(e.source), t = end(e.target);
+  if (!s || !t) return;
+  const kept = pts.filter((p) => !insideRect(s, p) && !insideRect(t, p));
+  const valid = kept.length && routeManual(e.style.routing ?? 'orthogonal', s, t, kept);
+  if (!valid) setStyle(ed, id, { points: null }, merge);
+  else if (kept.length !== pts.length) setStyle(ed, id, { points: kept }, merge);
+}
+
+/**
  * Bend that makes a link leave `r` through the side facing coordinate `c` on `axis`, or null
  * while `c` is still within the node's extent (the end can just slide along its side).
  */
@@ -493,6 +511,7 @@ export class SegmentGesture {
 
   up() {
     this.ed.overlay.sideMarks = [];
+    dropStaleWaypoints(this.ed, this.id, this.key);
     this.ed.history.seal();
   }
 
@@ -530,6 +549,7 @@ export class WaypointGesture {
   }
 
   up() {
+    dropStaleWaypoints(this.ed, this.id, this.key);
     this.ed.history.seal();
   }
 
