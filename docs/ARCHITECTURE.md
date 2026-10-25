@@ -3,12 +3,17 @@
 Archie is a static, dependency-free web app (ES modules, no build step). The code has four layers. Each one only depends on the layers below it.
 
 ```text
- ui/       DOM chrome: toolbar, dock, inspector, palette, menus, label editor, minimap
+ ui/       DOM chrome: toolbar, dock, inspector, palette, menus, label editor, minimap,
+           hover card, checks panel, presentation bar, flow player, breadcrumb, share links
  render/   Canvas 2D renderer: draws the scene, owns visual-only animation state
- editor/   Interaction model: selection, gestures, commands, camera (no DOM)
- engine/   Headless core: document, history, spatial index, snapping, routing, layout
- domain/   A schema (node/edge kinds, icons, colors). The only domain-aware code
+ editor/   Interaction model: selection, gestures, commands, camera, views, flows (no DOM)
+ engine/   Headless core: document, history, spatial index, snapping, routing, layout,
+           graph analysis, diagram checks, legend content, input sanitizing
+ domain/   The architecture schema (node/edge kinds, icons, colors), starter templates and
+           text formats (Mermaid, PlantUML, Structurizr, Markdown). The only domain-aware code
 ```
+
+`src/main.js` is the app shell: it builds the editor, renderer and UI, and owns files, autosave, sharing, presenting and toasts.
 
 The engine and the editor never touch the DOM. They run in Node, which is why `npm test` exercises them directly. A different renderer (SVG, WebGL) or front-end (React) could replace `render/` and `ui/` without touching the core.
 
@@ -22,14 +27,23 @@ The engine and the editor never touch the DOM. They run in Node, which is why `n
 | `snapping.js` | Grid, object alignment (edges and centers) and equal-spacing snapping. Also returns guide geometry. |
 | `routing.js` | Orthogonal A\* router, plus simple, curved and straight variants and port spreading. |
 | `router.js` | `EdgeRouter`: route cache with precise invalidation and a per-frame time budget. |
-| `layout.js` | Container-aware layered (Sugiyama-style) auto layout. |
+| `layout.js` | Container-aware layered (Sugiyama-style) auto layout. Gaps between ranks widen to fit link labels. |
+| `analysis.js` | Graph queries over links: transitive `dependencies` (up and down) and `pathsBetween` two nodes. |
+| `checks.js` | `checkDiagram`: review rules (boundary crossings without protocol, orphans, duplicates, default names…). |
+| `legend.js` | What a legend lists (kinds in use) and how tall it is, without measuring text. |
+| `schema.js` | Type resolution, boundary and bus helpers, and `sanitizeDiagram` for anything loaded from outside. |
 
 ### Data model
 
 ```js
 node = { id, type, parent, x, y, w, h, label, data: {}, style: {}, z, collapsed?, expanded?: { w, h } }
 edge = { id, type, source, target, label, data: {}, style: { routing?, points?, labelT?, color? } }
+flow = { id, name, steps: [{ edge, label, reverse? }] }   // a request scenario over links
 ```
+
+- Element details live in `data`: `description`, `owner`, `status` (`planned` / `deprecated`), `links` (URLs, opened only if http(s): `ui/links.js`).
+- Flows are a third kind in the document (`k: 'flow'` ops), so they undo, save and share like the rest. Removing a link removes its steps in the same transaction.
+- `doc.setScope(id)` limits what is shown to a module's contents plus their direct neighbours (`doc.context()`), for module views. It is view state: not undoable, not in the patches.
 
 - Coordinates are absolute world units. Moving a container moves its descendants (`moveBy`).
 - `type` is resolved through the schema: default size, whether it's a container, and visuals.
@@ -37,7 +51,7 @@ edge = { id, type, source, target, label, data: {}, style: { routing?, points?, 
 - `edge.data.tech` is a link's protocol, drawn under its label in monospace (the tag is two lines when both are set).
 - `edge.style.points` holds a hand-made route: bends for orthogonal links, waypoints for straight and curved ones. `labelT` (0–1) is the label's position along the path.
 - A collapsed container keeps its contents, which stay in the tree and still move with it, but hides them. `expanded` remembers the size to restore.
-- `doc.hidden()` answers "is this node off screen inside a collapsed module". `doc.visibleAncestor(id)` answers "what stands in for it".
+- `doc.hidden()` answers "is this node off screen" (inside a collapsed module, or outside the open view). `doc.visibleAncestor(id)` answers "what stands in for it"; collapsing above an open view doesn't count.
 
 ### Transactions and patches
 
@@ -134,6 +148,13 @@ Unconnected siblings stack like a rank. Directions are `LR` and `TB`. On a 2,000
 - **Collapse/expand** behaves like an accordion: siblings entirely to the right or below shift by the size change, so expanding never overlaps neighbours. Auto layout treats a collapsed module as one node and leaves its contents alone.
 - **Commands** (`commands.js`): one registry drives keyboard shortcuts, the command palette, menus and the help sheet. Digits map by physical key (`code`) and letters by character (`key`), so shortcuts work on AZERTY and other layouts.
 - **Camera** (`camera.js`): an infinite canvas. Animated transitions interpolate zoom in log space. `insets` keep "fit" framing clear of floating panels.
+- **Modes and views** (view state, never in the document's history):
+  - **Dependency focus** (`focusDeps`, <kbd>D</kbd>): `dependencyFocus()` returns the nodes and links to keep lit for the selection; the renderer fades the rest.
+  - **Flows** (`flow = { id, step, recording }`): recording turns link clicks into steps; playing (`step ≥ 0`) highlights one step, `flowFocus()` lights the flow, arrows step through.
+  - **Module views** (`openView`, `viewUp`, `viewPath`): set the document scope. New or dropped things outside every box go into the view's module (`containerAt` falls back to it); context nodes are never re-parented.
+  - **Read-only** (`setReadOnly`, presenting and view-only links): drags pan, and only commands of the View group or flagged `readOnly` run (`allowed(cmd)`).
+  - `escape()` steps back one level through all of these: selection, flow, focus, view, then emits `escape` for the app.
+- **Events** the UI listens to: `invalidate`, `selectionchange`, `docchange`, `history`, `hover`, `gesture`, `camera`, `cursor`, `tool`, `settings`, `edit-label`, `edit-end`, `commit-edit`, `contextmenu`, `layout`, `notice` (a toast), `focus`, `flow`, `view`, `readonly`, `escape`.
 
 ## Renderer (`src/render`)
 
@@ -149,6 +170,9 @@ Unconnected siblings stack like a rank. Directions are `LR` and `TB`. On a 2,000
 - **Grid:** a GPU-composited SVG pattern behind the canvas, adapting by powers of 5. It costs nothing in the canvas frame.
 - **Overview batching:** below 20% zoom, all links go into one path and nodes are filled in one batch per color.
 - **Collapsed modules:** drawn as stacked cards with an item count. Links proxied to the same pair of visible nodes are drawn once, labelled "N links".
+- **Link tags** (label over protocol) are placed by `#placeTags`: each slides along its link to a spot clear of other tags and of element cards (most constrained first, then two repair passes). Places are kept while the document doesn't change, so panning only places links coming into view.
+- **Fading:** the dependency focus and a playing flow fade what they leave out; context nodes of a module view are drawn at half strength.
+- **Overlays:** flow step badges and the current step's callout, quarter/third marks while sliding a link end, legends (content from `engine/legend.js`, cached per document version), status badges.
 - **Export:** `exportPNG()` and `exportSVG()` reuse the same scene drawing, without selection or hover decorations.
   - SVG goes through `SVGContext` (`svg-context.js`), a recording, Canvas2D-compatible context that emits paths, text and drop-shadow filters.
   - So the vector output matches the screen, and there is no second drawing implementation to keep in sync.
@@ -197,6 +221,17 @@ Two more schema flags:
 - Auto layout skips them and then re-wraps whatever they surrounded before.
 - `outlineSelection` creates one around the selection without re-parenting anything. `dashed` gives external systems a dashed border. Adding a kind is a schema entry. Kinds with a `shortcut` automatically get a keyboard shortcut, a command and a dock entry.
 
+## Templates and text formats (`src/domain`)
+
+- `templates.js`: starter models without positions, laid out on open.
+- `formats/`: one pure module per format, sharing identifier and escaping helpers (`shared.js`).
+  - `mermaid.js`: flowchart export and import (`fromMermaid` returns a model; `Editor.importModel` lays it out and inserts it as one undo step).
+  - `plantuml.js`, `structurizr.js` (C4 mapping), `markdown.js` (element and link catalog), `sequence.js` (a flow as a sequence diagram).
+
+## Input from outside
+
+Diagrams arrive from files, share links (`#d=` / `#v=`, deflate + base64url in the URL fragment: `ui/share.js`, nothing is uploaded), the clipboard and storage. Everything goes through `sanitizeDiagram` before `load`: shape checks, bounded sizes and text, unknown kinds mapped to defaults, missing parents and parent cycles repaired, dangling links and steps dropped. Decoding a link caps the inflated size. Text is only ever drawn on the canvas or set as DOM text; links open only if http(s).
+
 ## Performance notes
 
 - With 2,000 nodes and 2,000 edges, a frame takes about 1.3 ms at 60% zoom and about 2.5 ms fully zoomed out (headless Chrome, software rendering).
@@ -205,7 +240,7 @@ Two more schema flags:
 
 ## Roadmap
 
-- Model views and filters (C4 levels: context, container, component), and drilling into a collapsed module as its own diagram.
+- Views with their own layout of shared elements (today a module view shows elements where they are in the overview), and C4 level filters.
 - Global lane assignment, so corridor separation also minimizes crossings between bundles.
 - Collaboration: the op format is already invertible and serializable. Add ids per client and a server relay or CRDT for ordering.
 - Use a Web Worker for routing and layout on very large models (the engine is DOM-free already).
