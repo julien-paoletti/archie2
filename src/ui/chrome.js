@@ -50,6 +50,13 @@ export function createTopBar(editor, app, root, { extras = [] } = {}) {
       ['image', 'Export PNG', () => app.exportPNG(), 'mod+shift+e'],
       ['image', 'Export SVG', () => app.exportSVG()],
       null,
+      ['code', 'Export Mermaid', () => app.exportText('mermaid')],
+      ['code', 'Export PlantUML', () => app.exportText('plantuml')],
+      ['code', 'Export Structurizr DSL', () => app.exportText('structurizr')],
+      ['file', 'Export catalog (Markdown)', () => app.exportText('markdown')],
+      ['copy', 'Copy as Mermaid', () => app.copyText('mermaid')],
+      ['upload', 'Import from Mermaid…', () => app.openImport()],
+      null,
       ['sparkles', 'Load sample architecture', () => app.loadSample()],
       ['zap', 'Stress test (2,000 nodes)', () => app.stressTest()],
     ];

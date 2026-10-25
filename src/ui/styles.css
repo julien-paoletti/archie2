@@ -474,6 +474,16 @@ kbd {
 .tpl-card .chip { margin-bottom: 4px; }
 .tpl-card strong { font-size: 13.5px; }
 .tpl-card span:last-child { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.import { width: min(640px, calc(100vw - 32px)); padding: 20px 24px 20px; }
+.import .muted { margin: 4px 0 12px; line-height: 1.5; }
+.input.mono { font: 500 12.5px/1.5 ui-monospace, "SF Mono", "Cascadia Code", Consolas, Menlo, monospace; font-variant-ligatures: none; }
+.import-text { min-height: 220px; }
+.import-error { min-height: 18px; margin: 6px 0 0; color: var(--danger); font-size: 12px; }
+.import-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.import-actions .btn { padding: 0 12px; color: var(--text); font-weight: 550; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-strong); color: #fff; }
+.btn.primary .kbd kbd { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.25); color: #fff; }
 .help { width: min(920px, calc(100vw - 32px)); max-height: 76vh; overflow: auto; padding: 20px 24px 24px; }
 .help-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .help-head h2 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }

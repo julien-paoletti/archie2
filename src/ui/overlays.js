@@ -194,6 +194,65 @@ export function createTemplatePicker(app, { icons, templates }) {
   };
 }
 
+/**
+ * Import from Mermaid: paste a flowchart (or pick a .mmd / Markdown file), then add it to the
+ * diagram or open it as a new one. Errors show inline, with their line number.
+ */
+export function createImportDialog(app, { extract }) {
+  const area = h('textarea', {
+    class: 'input mono import-text', rows: '12', spellcheck: 'false',
+    placeholder: 'flowchart LR\n  web[Web app] -->|HTTPS| api[[API]]\n  api --> db[(Database)]',
+  });
+  const error = h('p', { class: 'import-error', role: 'alert' });
+  const file = h('input', { type: 'file', accept: '.mmd,.mermaid,.md,.markdown,.txt,text/plain', style: { display: 'none' } });
+  const run = (replace) => {
+    try {
+      app.importMermaid(extract(area.value), { replace });
+      close();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  };
+  file.onchange = async () => {
+    if (file.files[0]) area.value = extract(await file.files[0].text());
+    file.value = '';
+    error.textContent = '';
+  };
+  area.addEventListener('input', () => (error.textContent = ''));
+  area.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run(false);
+  });
+  const box = h('div', { class: 'panel import', role: 'dialog', 'aria-label': 'Import from Mermaid' },
+    h('div', { class: 'help-head' }, h('h2', {}, 'Import from Mermaid'),
+      h('button', { class: 'btn', type: 'button', 'aria-label': 'Close', onclick: () => close() }, svg(ui.x))),
+    h('p', { class: 'muted small' }, 'Paste a flowchart, or a Markdown file containing one. Subgraphs become modules; cylinders, stadiums and hexagons become databases, actors and queues. You can also paste Mermaid straight onto the canvas.'),
+    area, error, file,
+    h('div', { class: 'import-actions' },
+      h('button', { type: 'button', class: 'btn', onclick: () => file.click() }, svg(ui.upload, { size: 15 }), 'Choose file…'),
+      h('span', { style: { flex: 1 } }),
+      h('button', { type: 'button', class: 'btn', onclick: () => run(true) }, 'Open as new diagram'),
+      h('button', { type: 'button', class: 'btn primary', onclick: () => run(false) }, 'Add to diagram', kbd('mod+enter'))));
+  const backdrop = h('div', { class: 'backdrop' }, box);
+  document.body.append(backdrop);
+  const close = () => backdrop.classList.remove('open');
+  backdrop.addEventListener('pointerdown', (e) => { if (e.target === backdrop) close(); });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && backdrop.classList.contains('open')) {
+      e.stopPropagation();
+      close();
+    }
+  }, true);
+  return {
+    open: () => {
+      error.textContent = '';
+      backdrop.classList.add('open');
+      requestAnimationFrame(() => area.focus());
+    },
+    close,
+  };
+}
+
 /** Keyboard & gesture reference, generated from the command registry. */
 export function createHelp(editor) {
   const groups = new Map();

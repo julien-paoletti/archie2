@@ -1283,6 +1283,25 @@ export class Editor extends Emitter {
     return top;
   }
 
+  /**
+   * Add a model without positions (e.g. imported from Mermaid) to the diagram: it is laid
+   * out on its own, then inserted centred on `at` as one undoable step, and selected.
+   */
+  importModel(model, { at = this.insertionPoint(), direction = this.settings.layoutDirection } = {}) {
+    const scratch = new DiagramDocument(this.schema);
+    scratch.load(model);
+    const rects = layoutHierarchy(scratch, { direction, padding: this.settings.containerPadding, header: this.settings.containerHeader });
+    scratch.transact('Layout', () => { for (const [id, r] of rects) scratch.update(id, r); }, { history: false });
+    const clip = { format: 'archie-clip', ...scratch.toJSON() };
+    const b = scratch.bounds();
+    if (!b) return [];
+    const g = this.settings.snapToGrid ? this.settings.grid : 1;
+    const top = this.insertSnapshot(clip, snap(at.x - b.w / 2, g) - b.x, snap(at.y - b.h / 2, g) - b.y, () => null);
+    this.setSelection(top);
+    this.zoomToRect(inflate(this.selectionBounds(), 60), { maxZoom: Math.max(this.camera.zoom, 1) });
+    return top;
+  }
+
   duplicate() {
     const ids = this.selectedNodeIds();
     if (!ids.length) return;

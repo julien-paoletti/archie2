@@ -11,10 +11,21 @@ import { createDock, createHints, createMinimap, createToaster, createTopBar, cr
 import { createInspector, createSelectionBar } from './ui/inspector.js';
 import { createHoverCard } from './ui/hovercard.js';
 import { createChecks } from './ui/checks.js';
-import { createCommandPalette, createContextMenu, createHelp, createTemplatePicker } from './ui/overlays.js';
+import { createCommandPalette, createContextMenu, createHelp, createImportDialog, createTemplatePicker } from './ui/overlays.js';
 import { templates } from './domain/templates.js';
+import { extractMermaid, fromMermaid, looksLikeMermaid, toMermaid } from './domain/formats/mermaid.js';
+import { toPlantUML } from './domain/formats/plantuml.js';
+import { toStructurizr } from './domain/formats/structurizr.js';
+import { toMarkdown } from './domain/formats/markdown.js';
 import { isEditable } from './ui/dom.js';
 import * as files from './ui/files.js';
+
+const TEXT_FORMATS = {
+  mermaid: { name: 'Mermaid', ext: 'mmd', build: toMermaid },
+  plantuml: { name: 'PlantUML', ext: 'puml', build: toPlantUML },
+  structurizr: { name: 'Structurizr DSL', ext: 'dsl', build: toStructurizr },
+  markdown: { name: 'Markdown', ext: 'md', build: toMarkdown },
+};
 
 const DOC_KEY = 'archie:document';
 const PREFS_KEY = 'archie:prefs';
@@ -248,6 +259,44 @@ class App extends Emitter {
     else toast('Nothing to export yet', { icon: 'image' });
   }
 
+  /** The diagram as text: 'mermaid' | 'plantuml' | 'structurizr' | 'markdown'. */
+  textOf(format) {
+    const opts = { title: this.title, direction: editor.settings.layoutDirection };
+    return TEXT_FORMATS[format].build(editor.doc, opts);
+  }
+
+  exportText(format) {
+    if (!editor.doc.nodes.size) return toast('Nothing to export yet', { icon: 'file' });
+    const f = TEXT_FORMATS[format];
+    download(new Blob([this.textOf(format)], { type: 'text/plain' }), `${slug(this.title)}.${f.ext}`);
+  }
+
+  async copyText(format) {
+    try {
+      await navigator.clipboard.writeText(this.textOf(format));
+      toast(`Copied as ${TEXT_FORMATS[format].name}`, { icon: 'copy' });
+    } catch (err) {
+      toast(`Could not copy: ${err.message}`, { icon: 'x', timeout: 5000 });
+    }
+  }
+
+  /** Mermaid flowchart text → elements: added to this diagram, or opened as a new one. */
+  importMermaid(text, { replace = false } = {}) {
+    const model = fromMermaid(text);
+    if (!model.nodes.length) throw new Error('No elements in that flowchart');
+    if (replace) {
+      const json = editor.toJSON(), title = this.title;
+      this.#openModel(model, 'Imported diagram');
+      if (json.nodes.length) toast('Imported as a new diagram', { action: { label: 'Restore', run: () => restore({ ...json, title }) }, timeout: 6000, icon: 'upload' });
+    } else {
+      const top = editor.importModel(model);
+      toast(`Imported ${plural(model.nodes.length, 'element')} and ${plural(model.edges.length, 'link')}`, { icon: 'upload', action: { label: 'Undo', run: () => editor.undo() } });
+      return top;
+    }
+  }
+
+  openImport() { importDialog.open(); }
+
   openTemplates() { templatePicker.open(); }
   openPalette() { palette_.open(); }
   openHelp() { help.open(); }
@@ -291,6 +340,7 @@ const toast = createToaster(root);
 const palette_ = createCommandPalette(editor, app, { icons });
 const help = createHelp(editor);
 const templatePicker = createTemplatePicker(app, { icons, templates });
+const importDialog = createImportDialog(app, { extract: extractMermaid });
 
 const appCommands = [
   { id: 'app.palette', title: 'Command palette', group: 'View', keys: ['mod+k', '/'], run: () => app.openPalette() },
@@ -305,6 +355,9 @@ const appCommands = [
   { id: 'file.saveAs', title: 'Save as…', group: 'File', keys: ['mod+shift+s'], run: () => app.saveAs() },
   { id: 'file.png', title: 'Export PNG', group: 'File', keys: ['mod+shift+e'], run: () => app.exportPNG() },
   { id: 'file.svg', title: 'Export SVG', group: 'File', run: () => app.exportSVG() },
+  ...Object.entries(TEXT_FORMATS).map(([k, f]) => ({ id: 'file.' + k, title: `Export ${f.name}`, group: 'File', run: () => app.exportText(k) })),
+  { id: 'file.copyMermaid', title: 'Copy as Mermaid', group: 'File', run: () => app.copyText('mermaid') },
+  { id: 'file.import', title: 'Import from Mermaid…', group: 'File', run: () => app.openImport() },
   { id: 'file.sample', title: 'Load sample architecture', group: 'File', run: () => app.loadSample() },
   { id: 'debug.stress', title: 'Stress test: 2,000 nodes', group: 'File', run: () => app.stressTest() },
 ];
@@ -332,9 +385,20 @@ document.addEventListener('cut', (e) => {
 document.addEventListener('paste', (e) => {
   if (isEditable(e.target)) return;
   e.preventDefault();
+  const text = e.clipboardData.getData('text/plain');
+  // Mermaid flowchart text (or Markdown holding one): import it as elements.
+  const mermaid = looksLikeMermaid(text) ? extractMermaid(text) : null;
+  if (mermaid) {
+    try {
+      app.importMermaid(mermaid);
+    } catch (err) {
+      toast(`Could not import that Mermaid: ${err.message}`, { icon: 'x', timeout: 6000 });
+    }
+    return;
+  }
   let clip = null;
   try {
-    const data = JSON.parse(e.clipboardData.getData('text/plain'));
+    const data = JSON.parse(text);
     if (data?.format === 'archie-clip') clip = data;
   } catch {
     // Not ours: fall back to the in-app clipboard.
@@ -408,6 +472,8 @@ function download(blob, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function slug(s) {
   return (s || 'diagram').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'diagram';
