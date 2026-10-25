@@ -11,7 +11,23 @@ import { boundariesCrossed, isOverlay, resolveType } from './schema.js';
  */
 export const LEGEND = { width: 240, header: 40, section: 26, row: 24, pad: 12 };
 
+const memo = new WeakMap();
+
+/**
+ * The legend's sections for the document as it is now: computed once per document version,
+ * shared by whoever asks (the editor sizing legends, the renderer drawing them).
+ * `geometryMatters` (on the result) tells whether moving things can change it: only
+ * through border-only outlines, whose crossings are found by position.
+ */
 export function legendEntries(doc) {
+  const hit = memo.get(doc);
+  if (hit && (hit.sections.geometryMatters ? hit.version === doc.version : hit.content === doc.contentVersion)) return hit.sections;
+  const sections = computeEntries(doc);
+  memo.set(doc, { version: doc.version, content: doc.contentVersion, sections });
+  return sections;
+}
+
+function computeEntries(doc) {
   const schema = doc.schema;
   const nodes = new Map(), boundaries = new Map(), edges = new Map(), statuses = new Set();
   for (const id of doc.order()) {
@@ -51,7 +67,9 @@ export function legendEntries(doc) {
       ...Object.entries(schema.statuses ?? {}).filter(([s]) => statuses.has(s)).map(([status, s]) => ({ kind: 'status', status, label: s.label, color: s.color })),
     ] },
   ];
-  return sections.filter((s) => s.entries.length);
+  const out = sections.filter((s) => s.entries.length);
+  out.geometryMatters = overlays.length > 0;
+  return out;
 }
 
 /** Height a legend needs for its sections (an empty one keeps a row for its placeholder). */

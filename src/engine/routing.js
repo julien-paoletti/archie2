@@ -526,6 +526,18 @@ function simplify(pts) {
   return out;
 }
 
+/** The same route moved by (dx, dy): what a link looks like when both its ends moved together. */
+export function translateRoute(r, dx, dy) {
+  const move = (p) => ({ x: p.x + dx, y: p.y + dy });
+  const points = r.points.map(move);
+  return {
+    ...r, points,
+    poly: r.poly === r.points ? points : r.poly.map(move),
+    bbox: { ...r.bbox, x: r.bbox.x + dx, y: r.bbox.y + dy },
+    mid: move(r.mid),
+  };
+}
+
 export function finish(kind, points, extra = null) {
   const poly = kind === 'bezier' ? sampleCubic(...points) : points;
   const bbox = boundsOf(poly.map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })));

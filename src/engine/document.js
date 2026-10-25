@@ -16,6 +16,9 @@ import { boundsOf } from './geometry.js';
 
 const GEOM_KEYS = ['x', 'y', 'w', 'h'];
 
+/** An op that only moves or resizes a node. */
+export const isMove = (op) => op.k === 'node' && op.t === 'set' && Object.keys(op.after).every((k) => GEOM_KEYS.includes(k));
+
 let seq = 0;
 export function uid(prefix = 'n') {
   seq = (seq + 1) % 1679616;
@@ -76,7 +79,10 @@ export class DiagramDocument extends Emitter {
   /** id → { id, name, steps: [{ edge, label, reverse }] } */
   flows = new Map();
   index = new SpatialHash(256);
+  /** Bumped by every change. */
   version = 0;
+  /** Bumped by every change except pure moves and resizes (for caches that ignore geometry). */
+  contentVersion = 0;
 
   #children = new Map();
   #adjacency = new Map();
@@ -86,6 +92,7 @@ export class DiagramDocument extends Emitter {
   #z = 0;
   #hidden = { key: '', set: new Set(), context: new Set() };
   #scope = { root: null, version: 0 };
+  #standIns = { key: '', map: new Map() };
 
   constructor(schema = {}) {
     super();
@@ -244,11 +251,20 @@ export class DiagramDocument extends Emitter {
    * In a scoped view, ancestors from the scope root up don't count.
    */
   visibleAncestor(id) {
+    // Asked for every link on every frame: cached per version and scope, without allocating.
+    // Not inside a transaction, where the version hasn't moved on yet.
+    const key = this.version + ':' + this.#scope.version;
+    if (this.#standIns.key !== key) this.#standIns = { key, map: new Map() };
+    const cached = this.#tx ? undefined : this.#standIns.map.get(id);
+    if (cached !== undefined) return cached;
     let v = id;
-    for (const a of this.ancestors(id)) {
-      if (a === this.#scope.root) break;
-      if (this.nodes.get(a).collapsed) v = a;
+    for (let p = this.nodes.get(id)?.parent, guard = 0; p != null && guard < 1000; p = this.nodes.get(p)?.parent, guard++) {
+      if (p === this.#scope.root) break;
+      const n = this.nodes.get(p);
+      if (!n) break;
+      if (n.collapsed) v = p;
     }
+    if (!this.#tx) this.#standIns.map.set(id, v);
     return v;
   }
 
@@ -293,6 +309,7 @@ export class DiagramDocument extends Emitter {
     const ops = tx.ops.filter(Boolean);
     if (ops.length) {
       this.version++;
+      if (!ops.every(isMove)) this.contentVersion++;
       const patch = { label: tx.label, ops, merge: tx.opts.merge ?? null, animate: !!tx.opts.animate };
       this.emit('change', { patch, source: tx.opts.source ?? 'local' });
       if (tx.opts.history !== false) this.emit('commit', patch);
@@ -476,6 +493,7 @@ export class DiagramDocument extends Emitter {
       if (!this.has(f.id)) this.#insert('flow', f);
     }
     this.version++;
+    this.contentVersion++;
     this.emit('change', { patch: { label: 'Load', ops: [], merge: null, animate: false }, source: 'load', reset: true });
   }
 

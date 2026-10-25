@@ -71,3 +71,27 @@ test('clicking where two links overlap picks the selected one', async () => {
   ed.setSelection(['e1']);
   assert.equal(ed.hitTest(at).id, 'e1', 'the selected one wins');
 });
+
+test('moving a module carries the routes inside it instead of routing them again', async () => {
+  const { Editor } = await import('../src/editor/editor.js');
+  const ed = new Editor({ schema: { ...schema, nodeTypes: { ...schema.nodeTypes, group: { container: true, w: 300, h: 200 } } } });
+  ed.doc.addNode({ id: 'g', type: 'group', x: 0, y: 0, w: 600, h: 300 });
+  ed.doc.addNode({ id: 'a', parent: 'g', x: 40, y: 80, w: 100, h: 60 });
+  ed.doc.addNode({ id: 'b', parent: 'g', x: 400, y: 160, w: 100, h: 60 });
+  ed.doc.addNode({ id: 'out', x: 900, y: 80, w: 100, h: 60 });
+  ed.doc.addEdge({ id: 'in', source: 'a', target: 'b' });
+  ed.doc.addEdge({ id: 'cross', source: 'b', target: 'out' });
+  const before = ed.router.get('in'), crossBefore = ed.router.get('cross');
+  let computed = 0;
+  const compute = ed.router.compute.bind(ed.router);
+  ed.router.compute = (...args) => { computed++; return compute(...args); };
+
+  ed.router.setLive(true);
+  ed.doc.transact('Move', () => ed.doc.moveBy(['g'], 30, 50));
+  const after = ed.router.get('in');
+  assert.deepEqual(after.points, before.points.map((p) => ({ x: p.x + 30, y: p.y + 50 })), 'translated');
+  assert.equal(computed, 0, 'not routed again');
+  assert.notEqual(ed.router.get('cross'), crossBefore, 'a link to the outside is re-routed');
+  assert.equal(computed, 1);
+  ed.router.setLive(false);
+});

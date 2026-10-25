@@ -16,6 +16,8 @@ export function createChecks(editor) {
 
   const refresh = () => {
     timer = 0;
+    // Not in the middle of a drag: the diagram is still changing (the gesture end reschedules).
+    if (editor.gesture) return;
     issues = checkDiagram(editor.doc);
     const warnings = issues.filter((i) => i.severity === 'warning').length;
     const tips = issues.length - warnings;
@@ -25,7 +27,11 @@ export function createChecks(editor) {
       : 'Checks: no issues';
     if (panel.classList.contains('open')) render();
   };
-  const schedule = () => { if (!timer) timer = setTimeout(refresh, 300); };
+  // Debounced: checks run once things settle, not several times a second while editing.
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(refresh, 400);
+  };
 
   const render = () => {
     const groups = new Map();
@@ -66,6 +72,7 @@ export function createChecks(editor) {
   const toggle = () => (panel.classList.contains('open') ? close() : open());
 
   editor.on('docchange', schedule);
+  editor.on('gesture', (active) => { if (!active) schedule(); });
   editor.registerCommand({ id: 'view.checks', title: 'Check diagram', group: 'View', run: open });
   refresh();
   return button;

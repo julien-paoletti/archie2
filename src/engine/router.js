@@ -1,4 +1,4 @@
-import { routeEdge, routeManual, routeToBus, separateSegments, spreadPorts } from './routing.js';
+import { routeEdge, routeManual, routeToBus, separateSegments, spreadPorts, translateRoute } from './routing.js';
 import { boundsOf, center, inflate, intersects, union } from './geometry.js';
 
 const ROUTE_KEYS = ['x', 'y', 'w', 'h', 'parent'];
@@ -151,6 +151,26 @@ export class EdgeRouter {
       this.#stale.clear();
       return;
     }
+    // Nodes moved without resizing (a drag, a nudge): node → [dx, dy]. A link whose two ends
+    // moved by the same amount (inside a dragged module) keeps its route, translated: routing
+    // it again on every pointer move would cost a full A* per link per frame.
+    const shift = new Map();
+    for (const op of patch.ops) {
+      if (op.k !== 'node' || op.t !== 'set' || 'w' in op.after || 'h' in op.after || 'parent' in op.after) continue;
+      if ('x' in op.after || 'y' in op.after) {
+        shift.set(op.id, ['x' in op.after ? op.after.x - op.before.x : 0, 'y' in op.after ? op.after.y - op.before.y : 0]);
+      }
+    }
+    const carried = new Set();
+    const carry = (e) => {
+      if (carried.has(e.id)) return true;
+      const a = shift.get(this.doc.visibleAncestor(e.source)), b = shift.get(this.doc.visibleAncestor(e.target));
+      const c = this.#cache.get(e.id);
+      if (!a || !b || !c || a[0] !== b[0] || a[1] !== b[1]) return false;
+      this.#cache.set(e.id, { ...c, route: translateRoute(c.route, a[0], a[1]) });
+      carried.add(e.id);
+      return true;
+    };
     const dirty = [];
     for (const op of patch.ops) {
       if (op.k === 'flow') continue;
@@ -165,7 +185,7 @@ export class EdgeRouter {
       } else {
         dirty.push(op.v);
       }
-      for (const e of this.doc.edgesOf(op.id)) this.#cache.delete(e.id);
+      for (const e of this.doc.edgesOf(op.id)) if (!carry(e)) this.#cache.delete(e.id);
     }
     if (!dirty.length) return;
     const area = inflate(boundsOf(dirty), this.margin);

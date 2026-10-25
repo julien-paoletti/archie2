@@ -85,8 +85,9 @@ export class CanvasRenderer {
   #members = new Set();
   #memberColor = '#0284c7';
   #focus = null;
-  #legend = { version: -1, sections: [] };
-  #tagMemo = null;
+  /** Link tag places: edge id → { route, p, rect } (see #placeTags). */
+  #tagMemo = new Map();
+  #lastLegend = null;
 
   constructor(editor, canvas, { theme, icons = {} }) {
     this.ed = editor;
@@ -227,17 +228,22 @@ export class CanvasRenderer {
 
   #onDocChange({ patch, source, reset }) {
     const now = performance.now();
+    if (reset || patch.ops.some((op) => op.t === 'set' && 'collapsed' in op.after)) this.#tagMemo.clear();
     if (reset) {
       this.#tweens.clear();
       this.#appear.clear();
       this.#ghosts = [];
+      for (const map of [this.#captions, this.#labels, this.#tabs]) map.clear();
       this.invalidate();
       return;
     }
+    this.#forgetTags(patch);
     const animate = patch.animate || source === 'undo' || source === 'redo' || source === 'cancel';
     const few = patch.ops.length <= 400;
     for (const op of patch.ops) {
       if (op.k === 'flow') continue;
+      // What was last drawn for a deleted item is no use any more.
+      if (op.t === 'del') for (const map of [this.#captions, this.#labels, this.#tabs]) map.delete(op.id);
       if (op.k === 'edge') {
         if (op.t === 'add' && few) this.#appear.set(op.id, now);
         continue;
@@ -986,7 +992,9 @@ export class CanvasRenderer {
   #legendContent(ctx, n, r, editing) {
     const { theme: th, lod } = this;
     const doc = this.ed.doc;
-    if (this.#legend.version !== doc.version) this.#legend = { version: doc.version, sections: legendEntries(doc) };
+    // During a drag the legend can only change through crossings: catch up when it ends.
+    const sections = this.ed.gesture && this.#lastLegend ? this.#lastLegend : legendEntries(doc);
+    this.#lastLegend = sections;
     const { header, section, row } = LEGEND;
     const x = r.x + 14, right = r.x + r.w - 14;
     ctx.textAlign = 'left';
@@ -996,13 +1004,13 @@ export class CanvasRenderer {
     if (editing !== 'label') ctx.fillText(this.#ellipsize(ctx, n.label || 'Legend', right - x), x, r.y + 22);
     if (lod < 2) return;
     let y = r.y + header;
-    if (!this.#legend.sections.length) {
+    if (!sections.length) {
       ctx.font = `500 11.5px ${FONT}`;
       ctx.fillStyle = th.muted;
       ctx.fillText('Add elements and links to fill it', x, y + 6);
       return;
     }
-    for (const s of this.#legend.sections) {
+    for (const s of sections) {
       ctx.font = `600 9.5px ${FONT}`;
       ctx.fillStyle = th.muted;
       ctx.fillText(s.title.toUpperCase(), x, y + section / 2 + 2);
@@ -1223,20 +1231,40 @@ export class CanvasRenderer {
    * Returns Map<edgeId, {x, y}>.
    */
   #placeTags(ctx, routed) {
-    // While the document doesn't change (panning, zooming, animations), tags keep their
-    // places: only links coming into view are placed, around the ones already there.
-    const version = this.ed.doc.version;
-    let memo = this.#tagMemo;
-    if (!memo || memo.version !== version) memo = this.#tagMemo = { version, placed: new Map() };
-    const fresh = routed.filter(([e, r]) => memo.placed.get(e.id)?.route !== r);
+    // Tags keep their places: only links coming into view, re-routed, or whose tag or
+    // surroundings changed (see #forgetTags) are placed, around the ones already there.
+    const placed = this.#tagMemo;
+    const fresh = routed.filter(([e, r]) => placed.get(e.id)?.route !== r);
     if (fresh.length) {
       const ids = new Set(fresh.map(([e]) => e.id));
-      const others = [...memo.placed].filter(([id, v]) => v.rect && !ids.has(id)).map(([, v]) => v.rect);
+      const others = [...placed].filter(([id, v]) => v.rect && !ids.has(id)).map(([, v]) => v.rect);
       const spots = this.#computeTags(ctx, fresh, others);
       // Links without a tag are remembered too, so they don't count as new on every frame.
-      for (const [e, route] of fresh) memo.placed.set(e.id, spots.get(e.id) ?? { route, p: null, rect: null });
+      for (const [e, route] of fresh) placed.set(e.id, spots.get(e.id) ?? { route, p: null, rect: null });
     }
-    return new Map(routed.map(([e]) => [e.id, memo.placed.get(e.id)?.p]));
+    return new Map(routed.map(([e]) => [e.id, placed.get(e.id)?.p]));
+  }
+
+  /**
+   * After a document change, forget the tag places it may have spoiled: edited or deleted
+   * links, and tags under an element that moved, resized, appeared or went.
+   */
+  #forgetTags(patch) {
+    const placed = this.#tagMemo;
+    const dirty = [];
+    for (const op of patch.ops) {
+      if (op.k === 'edge') placed.delete(op.id);
+      else if (op.k === 'node') {
+        const n = this.ed.doc.nodes.get(op.id);
+        if (op.t !== 'set') dirty.push(op.v);
+        else if (n && GEOM.some((k) => k in op.after)) dirty.push(n, { ...n, ...pickRect(op.before) });
+      }
+    }
+    if (!dirty.length) return;
+    const area = boundsOf(dirty);
+    for (const [id, v] of placed) {
+      if (v.rect && intersects(v.rect, area) && dirty.some((r) => intersects(v.rect, r))) placed.delete(id);
+    }
   }
 
   /** Place the tags of `routed` around the `others` (tag rects already placed). Map<id, {p, rect, route}>. */
@@ -1801,4 +1829,11 @@ function borderCrossings(poly, r) {
 /** Caption under a name: the element's own type label and/or technology, if any. */
 function captionOf(n) {
   return [n.data?.stereotype, n.data?.tech].filter(Boolean).join(' · ');
+}
+
+/** The geometry keys of a patch's `before` values. */
+function pickRect(o) {
+  const out = {};
+  for (const k of GEOM) if (k in o) out[k] = o[k];
+  return out;
 }

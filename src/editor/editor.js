@@ -1,5 +1,5 @@
 import { Emitter } from '../engine/emitter.js';
-import { DiagramDocument, uid } from '../engine/document.js';
+import { DiagramDocument, isMove, uid } from '../engine/document.js';
 import { History } from '../engine/history.js';
 import { EdgeRouter } from '../engine/router.js';
 import { layoutHierarchy } from '../engine/layout.js';
@@ -69,6 +69,8 @@ export class Editor extends Emitter {
   #pasteCount = 0;
   #copyPoint = null;
   #focusCache = { key: null, value: null };
+  #legendGeometry = false;
+  #legendsPending = false;
 
   constructor({ schema, settings = {} }) {
     super();
@@ -159,7 +161,7 @@ export class Editor extends Emitter {
   }
 
   #onDocChange(e) {
-    this.#fitLegends();
+    this.#fitLegends(e);
     const gone = [...this.selection].filter((id) => !this.doc.has(id));
     if (gone.length || e.reset) {
       this.selection = new Set([...this.selection].filter((id) => this.doc.has(id)));
@@ -186,10 +188,22 @@ export class Editor extends Emitter {
    * A legend's height follows its content (what the diagram uses). Kept out of the history:
    * it is derived, and undoing the change that caused it recomputes it anyway.
    */
-  #fitLegends() {
+  #fitLegends(e) {
+    // Moving things only matters through border-only outlines, and then once the drag is over.
+    if (!e.reset && e.patch.ops.every(isMove)) {
+      if (!this.#legendGeometry) return;
+      if (this.gesture) {
+        this.#legendsPending = true;
+        return;
+      }
+    }
+    this.#legendsPending = false;
     const legends = [...this.doc.nodes.values()].filter((n) => this.schema.nodeTypes[n.type]?.shape === 'legend');
+    this.#legendGeometry = false;
     if (!legends.length) return;
-    const h = legendHeight(legendEntries(this.doc));
+    const sections = legendEntries(this.doc);
+    this.#legendGeometry = sections.geometryMatters;
+    const h = legendHeight(sections);
     const stale = legends.filter((n) => n.h !== h);
     if (stale.length) this.doc.transact('Legend', () => stale.forEach((n) => this.doc.update(n.id, { h })), { history: false });
   }
@@ -763,7 +777,7 @@ export class Editor extends Emitter {
       const g = this.gesture;
       this.gesture = null;
       g.up(e);
-      this.emit('gesture', false);
+      this.#gestureEnded();
       this.#updateHover(e);
       return;
     }
@@ -886,7 +900,7 @@ export class Editor extends Emitter {
     if (!g) return;
     this.gesture = null;
     g.cancel();
-    this.emit('gesture', false);
+    this.#gestureEnded();
   }
 
   /** Undo the history entry produced by an aborted gesture, without leaving a redo step. */
@@ -902,6 +916,12 @@ export class Editor extends Emitter {
     if (hit && (hit.kind === 'node' || hit.kind === 'edge') && !this.selection.has(hit.id)) this.setSelection([hit.id]);
     if (!hit) this.setSelection([]);
     this.emit('contextmenu', { x: e.x, y: e.y, world: this.toWorld(e), hit });
+  }
+
+  /** A gesture is over: catch up on work deferred while it ran, then tell the views. */
+  #gestureEnded() {
+    if (this.#legendsPending) this.#fitLegends({ reset: true });
+    this.emit('gesture', false);
   }
 
   #begin(g) {
