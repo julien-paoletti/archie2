@@ -494,31 +494,44 @@ export class CanvasRenderer {
       const f = lod === 2 ? 1 : Math.min(0.6 / z, Math.max(1, r.w / 200));
       const size = 13 * f;
       const ix = r.x + 16, iy = r.y + 16;
-      this.#icon(ctx, type.icon, ix, iy, 18 * f, color, 2);
-      ctx.font = `600 ${size}px ${FONT}`;
-      ctx.fillStyle = th.text;
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'left';
       const lx = ix + 18 * f + 8 * f;
       const maxW = r.w - (lx - r.x) - 44;
+      // Measure first: the title sits on a pill sized to it.
+      ctx.font = `600 ${size}px ${FONT}`;
       const label = this.#ellipsize(ctx, n.label || type.label, maxW);
-      if (editing !== 'label') ctx.fillText(label, lx, iy + 9 * f + 0.5);
       const used = this.#measureText(ctx, label);
-      let right = lx + used;
+      let right = lx + used, caption = null;
       if (lod === 2) {
-        const caption = captionOf(n) || (type.label ?? '').toUpperCase();
         ctx.font = `500 10.5px ${FONT}`;
-        ctx.fillStyle = th.muted;
         const room = maxW - used - 10;
         if (room > 40) {
+          caption = this.#ellipsize(ctx, captionOf(n) || (type.label ?? '').toUpperCase(), room);
           this.#captions.set(n.id, { x: lx + used + 10, y: iy + 1.5, w: room, h: 16, size: 10.5, align: 'left' });
-          const shown = this.#ellipsize(ctx, caption, room);
-          if (editing !== 'stereotype') ctx.fillText(shown, lx + used + 10, iy + 9.5);
-          right = lx + used + 10 + this.#measureText(ctx, shown);
+          right = lx + used + 10 + this.#measureText(ctx, caption);
         }
       }
-      // Where the header's icon and text are: links pass behind it (see #labelHoles).
-      this.#headers.set(n.id, { x: ix, y: iy, w: right - ix, h: 18 * f });
+      // A subtle, frosted pill behind the title: readable over links and nested content.
+      // Links pass behind it (see #labelHoles).
+      const pad = 7 * f, pill = { x: ix - pad, y: iy - 5 * f, w: right - ix + pad * 2, h: 28 * f };
+      ctx.beginPath();
+      ctx.roundRect(pill.x, pill.y, pill.w, pill.h, pill.h / 2);
+      ctx.fillStyle = withAlpha(th.labelBg, th.dark ? 0.7 : 0.75);
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, 1 / z);
+      ctx.strokeStyle = withAlpha(color, 0.2);
+      ctx.stroke();
+      this.#headers.set(n.id, pill);
+      this.#icon(ctx, type.icon, ix, iy, 18 * f, color, 2);
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      ctx.font = `600 ${size}px ${FONT}`;
+      ctx.fillStyle = th.text;
+      if (editing !== 'label') ctx.fillText(label, lx, iy + 9 * f + 0.5);
+      if (caption) {
+        ctx.font = `500 10.5px ${FONT}`;
+        ctx.fillStyle = th.muted;
+        if (editing !== 'stereotype') ctx.fillText(caption, lx + used + 10, iy + 9.5);
+      }
     }
     if (lod > 0) this.#toggleButton(ctx, n, color, Math.max(hs, ss), false);
     this.#statusBadge(ctx, n, r, 64);
@@ -593,7 +606,7 @@ export class CanvasRenderer {
       ctx.font = `500 ${10.5 * f}px ${FONT}`;
       const caption = lod === 2 ? [n.data?.stereotype || type.label, n.data?.tech].filter(Boolean).join(' · ') : '';
       const cap = caption ? this.#ellipsize(ctx, caption, room - lw - icon - pad * 2 - gap - 8 * f) : '';
-      const cw = cap ? this.#measureText(ctx, cap) + 8 * f : 0;
+      const cw = cap ? this.#measureText(ctx, cap) + 10 * f : 0;
       const x = r.x + 18, y = r.y - h / 2;
       const tw = pad + icon + gap + lw + cw + pad;
       this.#tabs.set(n.id, { x, y, w: tw, h });
@@ -611,7 +624,7 @@ export class CanvasRenderer {
       ctx.fillStyle = th.text;
       if (editing !== 'label') ctx.fillText(label, x + pad + icon + gap, y + h / 2 + 0.5);
       if (cap) {
-        const cx = x + pad + icon + gap + lw + 8 * f;
+        const cx = x + pad + icon + gap + lw + 10 * f;
         this.#captions.set(n.id, { x: cx, y: y + h / 2 - 8, w: Math.max(cw, 120), h: 16, size: 10.5 * f, align: 'left' });
         ctx.font = `500 ${10.5 * f}px ${FONT}`;
         ctx.fillStyle = th.muted;
@@ -626,7 +639,7 @@ export class CanvasRenderer {
    * tabs of their boundaries, with a little room around.
    */
   #labelHoles(containers) {
-    const pad = 4 / this.z;
+    const pad = 2 / this.z;
     const out = [];
     for (const [n] of containers) {
       const r = this.#headers.get(n.id) ?? this.#tabs.get(n.id);
