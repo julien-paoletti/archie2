@@ -82,8 +82,8 @@ const OPENERS = [
   ['((', '))', 'actor'], ['[/', '/]', 'queue'], ['[\\', '\\]', 'queue'], ['[/', '\\]', 'component'], ['[\\', '/]', 'component'],
   ['[', ']', 'component'], ['(', ')', 'component'], ['{', '}', 'component'], ['>', ']', 'note'],
 ];
-// Arrows: --> ---> --- -.-> -.- ==> === --o --x (any length), with an optional |label|.
-const EDGE = /^\s*(<?)(-{2,}>|-{3,}|-\.+->|-\.+-|={2,}>|={3,}|-{2,}[ox]|={2,}[ox]|-\.+-[ox])(?:\|([^|]*)\|)?\s*/;
+// Arrows: --> ---> --- -.-> -.- ==> === --o --x ~~~ (any length), with an optional |label|.
+const EDGE = /^\s*(<?)(-{2,}>|-{3,}|-\.+->|-\.+-|={2,}>|={3,}|-{2,}[ox]|={2,}[ox]|-\.+-[ox]|~{3,})(?:\|([^|]*)\|)?\s*/;
 // Text in the middle: A -- label --> B, A -. label .-> B, A == label ==> B. Read in two steps
 // (the opening, then the first closing arrow after it): one pattern with the label in between
 // backtracks badly on long runs of spaces.
@@ -198,7 +198,8 @@ export function fromMermaid(text) {
       } else throw new Error(`Line ${lineNo}: can't read "${rest.trim().slice(0, 60)}"`);
       const [to, after] = readGroup(rest.slice(used), lineNo);
       if (edges.length + from.length * to.length > MAX_ITEMS || nodes.size > MAX_ITEMS) throw new Error(`Line ${lineNo}: too many elements`);
-      for (const s of from) for (const t of to) edges.push(edgeOf(s, t, arrow, label, both));
+      // ~~~ is an invisible link, a layout hint only: its ends are read, but no link is drawn.
+      if (arrow[0] !== '~') for (const s of from) for (const t of to) edges.push(edgeOf(s, t, arrow, label, both));
       [from, rest] = [to, after];
     }
   });

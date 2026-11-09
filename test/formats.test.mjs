@@ -94,6 +94,13 @@ test('Mermaid import: the syntax people actually write', () => {
   assert.equal(n.A.parent, null);
 });
 
+test('Mermaid invisible links (~~~) are read but not drawn', () => {
+  const m = fromMermaid('flowchart TD\n A --> B\n B ~~~ C["Later"]\n C ~~~~ D & E');
+  assert.deepEqual(m.nodes.map((x) => x.id), ['A', 'B', 'C', 'D', 'E']);
+  assert.equal(m.nodes[2].label, 'Later');
+  assert.deepEqual(m.edges.map((e) => `${e.source}>${e.target}`), ['A>B']);
+});
+
 test('Mermaid import errors point at the line', () => {
   assert.throws(() => fromMermaid('sequenceDiagram\nA->>B: hi'), /Line 1: a Mermaid flowchart starts with/);
   assert.throws(() => fromMermaid('flowchart LR\nA --> B\nA ~~> B'), /Line 3: can't read "~~> B"/);
