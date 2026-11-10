@@ -666,13 +666,14 @@ export class Editor extends Emitter {
     }
   }
 
-  /** Mouse wheels zoom, trackpads pan, pinch (ctrl+wheel) zooms. Shift+wheel pans sideways. */
+  /** Wheel and two-finger scroll pan (Shift: sideways); Ctrl/⌘+wheel and pinch zoom. */
   wheel(e) {
     let { dx, dy } = e;
     if (e.mod) {
-      this.camera.zoomAt(e, Math.exp(-dy * 0.01));
-    } else if ((e.deltaMode === 1 || (dx === 0 && Math.abs(dy) >= 50 && Number.isInteger(dy))) && !e.shift) {
-      this.camera.zoomAt(e, Math.exp(-Math.sign(dy) * Math.min(Math.abs(dy), 150) * 0.0018));
+      // A mouse wheel moves in coarse notches (lines, or big round pixel steps): one notch is
+      // one even zoom step. A pinch sends fine deltas, followed as they come.
+      const notch = e.deltaMode === 1 || (dx === 0 && Math.abs(dy) >= 50 && Number.isInteger(dy));
+      this.camera.zoomAt(e, Math.exp(notch ? -Math.sign(dy) * Math.min(Math.abs(dy), 150) * 0.0018 : -dy * 0.01));
     } else {
       if (e.shift && dx === 0) [dx, dy] = [dy, 0];
       this.camera.panBy(-dx, -dy);
